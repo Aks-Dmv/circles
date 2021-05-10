@@ -126,7 +126,7 @@ class DNRI(nn.Module):
                 all_predictions.append(predictions)
         predictions = inputs[:, burn_in_timesteps-1]
         for step in range(prediction_steps):
-            predictions = predictions + torch.normal(0., 0.05, size=(predictions.shape[0],predictions.shape[1], predictions.shape[2])).cuda()
+            # predictions = predictions + torch.normal(0., 0.05, size=(predictions.shape[0],predictions.shape[1], predictions.shape[2])).cuda()
             current_edge_logits, prior_hidden = self.encoder.single_step_forward(predictions, prior_hidden)
             predictions, decoder_hidden, edges = self.single_step_forward(predictions, decoder_hidden, current_edge_logits, True)
             all_predictions.append(predictions)
@@ -589,7 +589,7 @@ class DNRI_MLP_Decoder(nn.Module):
         num_vars = params['num_vars']
         edge_types = params['num_edge_types']
         n_hid = params['decoder_hidden']
-        msg_hid = params['decoder_hidden']
+        msg_hid = int(params['decoder_hidden']/8)
         msg_out = msg_hid #TODO: make this a param
         skip_first = params['skip_first']
         n_in_node = params['input_size']
