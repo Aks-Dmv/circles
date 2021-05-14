@@ -62,9 +62,9 @@ class SmallSynthData(Dataset):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--output_dir', required=True)
-    parser.add_argument('--num_train', type=int, default=100)
-    parser.add_argument('--num_val', type=int, default=100)
-    parser.add_argument('--num_test', type=int, default=100)
+    parser.add_argument('--num_train', type=int, default=10000)
+    parser.add_argument('--num_val', type=int, default=10000)
+    parser.add_argument('--num_test', type=int, default=10000)
     parser.add_argument('--num_time_steps', type=int, default=50)
     parser.add_argument('--pull_factor', type=float, default=0.1)
     parser.add_argument('--push_factor', type=float, default=0.05)
