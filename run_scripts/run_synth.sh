@@ -25,10 +25,10 @@ do
 
 
     WORKING_DIR="${BASE_RESULTS_DIR}dnri/seed_${SEED}/"
-    ENCODER_ARGS="--encoder_hidden 64 --encoder_mlp_num_layers 3 --encoder_mlp_hidden 32 --encoder_rnn_hidden 16"
-    DECODER_ARGS="--decoder_hidden 64 --decoder_type ref_mlp"
-    HIDDEN_ARGS="--rnn_hidden 16"
-    PRIOR_ARGS="--use_learned_prior --prior_num_layers 3 --prior_hidden_size 16"
+    ENCODER_ARGS="--encoder_hidden 128 --encoder_mlp_num_layers 3 --encoder_mlp_hidden 64 --encoder_rnn_hidden 32"
+    DECODER_ARGS="--decoder_hidden 128 --decoder_type ref_mlp"
+    HIDDEN_ARGS="--rnn_hidden 32"
+    PRIOR_ARGS="--use_learned_prior --prior_num_layers 3 --prior_hidden_size 32"
     MODEL_ARGS="--model_type dnri --graph_type dynamic --skip_first --num_edge_types 2 $ENCODER_ARGS $DECODER_ARGS $HIDDEN_ARGS $PRIOR_ARGS --seed ${SEED}"
     TRAINING_ARGS='--add_uniform_prior --no_edge_prior 0.2 --batch_size 512 --lr 5e-4 --use_adam --num_epochs 200 --lr_decay_factor 0.8 --lr_decay_steps 200 --normalize_kl --normalize_nll --tune_on_nll --val_teacher_forcing --teacher_forcing_steps -1'
     mkdir -p $WORKING_DIR
