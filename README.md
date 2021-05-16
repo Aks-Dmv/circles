@@ -1,5 +1,7 @@
 # Code for the RL part of it
 
+Another minor modification to test branch pushing
+
 This codebase accompanies the paper ["Dynamic Neural Relational Inference"](http://openaccess.thecvf.com/content_CVPR_2020/html/Graber_Dynamic_Neural_Relational_Inference_CVPR_2020_paper.html) from CVPR 2020.
 
 This code was written using the following packages:
