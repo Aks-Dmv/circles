@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from torch.nn import init
 import torch.nn.functional as F
+from copy import deepcopy
 import numpy as np
 from . import model_utils
 from .model_utils import RefNRIMLP, encode_onehot
@@ -19,6 +20,10 @@ class DNRI(nn.Module):
             self.decoder = DNRI_MLP_Decoder(params)
         else:
             self.decoder = DNRI_Decoder(params)
+        self.decoder_targ = deepcopy(self.decoder)
+        # Freeze target networks with respect to optimizers (only update via polyak averaging)
+        for p in self.decoder_targ.parameters():
+            p.requires_grad = False
         self.num_edge_types = params.get('num_edge_types')
 
         # Training params
@@ -293,22 +298,8 @@ class DNRI_Encoder(nn.Module):
             rnn_hidden_size = hidden_size
         if rnn_type == 'lstm':
             self.forward_rnn = nn.LSTM(hidden_size, rnn_hidden_size, batch_first=True)
-            self.reverse_rnn = nn.LSTM(hidden_size, rnn_hidden_size, batch_first=True)
         elif rnn_type == 'gru':
             self.forward_rnn = nn.GRU(hidden_size, rnn_hidden_size, batch_first=True)
-            self.reverse_rnn = nn.GRU(hidden_size, rnn_hidden_size, batch_first=True)
-        out_hidden_size = 2*rnn_hidden_size
-        num_layers = params['encoder_mlp_num_layers']
-        if num_layers == 1:
-            self.encoder_fc_out = nn.Linear(out_hidden_size, self.num_edges)
-        else:
-            tmp_hidden_size = params['encoder_mlp_hidden']
-            layers = [nn.Linear(out_hidden_size, tmp_hidden_size), nn.ELU(inplace=True)]
-            for _ in range(num_layers - 2):
-                layers.append(nn.Linear(tmp_hidden_size, tmp_hidden_size))
-                layers.append(nn.ELU(inplace=True))
-            layers.append(nn.Linear(tmp_hidden_size, self.num_edges))
-            self.encoder_fc_out = nn.Sequential(*layers)
 
         num_layers = params['prior_num_layers']
         if num_layers == 1:
@@ -397,15 +388,10 @@ class DNRI_Encoder(nn.Module):
             x = x.contiguous().view(-1, old_shape[2], old_shape[3])
             forward_x, prior_state = self.forward_rnn(x)
             timesteps = old_shape[2]
-            reverse_x = x.flip(1)
-            reverse_x, _ = self.reverse_rnn(reverse_x)
-            reverse_x = reverse_x.flip(1)
             
             #x: [batch*num_edges, num_timesteps, hidden_size]
             prior_result = self.prior_fc_out(forward_x).view(old_shape[0], old_shape[1], timesteps, self.num_edges).transpose(1,2).contiguous()
-            combined_x = torch.cat([forward_x, reverse_x], dim=-1)
-            encoder_result = self.encoder_fc_out(combined_x).view(old_shape[0], old_shape[1], timesteps, self.num_edges).transpose(1,2).contiguous()
-            return prior_result, encoder_result, prior_state
+            return prior_result, prior_state
         else:
             # Inputs is shape [batch, num_timesteps, num_vars, input_size]
             num_timesteps = inputs.size(1)
@@ -435,19 +421,8 @@ class DNRI_Encoder(nn.Module):
                 all_x.append(x.cpu())
                 all_forward_x.append(forward_x.cpu())
                 all_prior_result.append(self.prior_fc_out(forward_x).view(old_shape[0], 1, old_shape[1], self.num_edges).cpu())
-            reverse_state = None
-            all_encoder_result = []
-            for timestep in range(num_timesteps-1, -1, -1):
-                x = all_x[timestep].cuda()
-                reverse_x, reverse_state = self.reverse_rnn(x, reverse_state)
-                forward_x = all_forward_x[timestep].cuda()
-                
-                #x: [batch*num_edges, num_timesteps, hidden_size]
-                combined_x = torch.cat([forward_x, reverse_x], dim=-1)
-                all_encoder_result.append(self.encoder_fc_out(combined_x).view(inputs.size(0), 1, -1, self.num_edges))
             prior_result = torch.cat(all_prior_result, dim=1).cuda(non_blocking=True)
-            encoder_result = torch.cat(all_encoder_result, dim=1).cuda(non_blocking=True)
-            return prior_result, encoder_result, prior_state
+            return prior_result, prior_state
 
     def single_step_forward(self, inputs, prior_state):
         # Inputs is shape [batch, num_vars, input_size]
