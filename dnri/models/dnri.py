@@ -42,7 +42,7 @@ class DNRI(nn.Module):
         self.burn_in_steps = params.get('train_burn_in_steps')
         self.teacher_forcing_prior = params.get('teacher_forcing_prior', False)
         self.val_teacher_forcing_steps = params.get('val_teacher_forcing_steps', -1)
-        self.add_uniform_prior = params.get('add_uniform_prior')
+        self.add_uniform_prior = True#params.get('add_uniform_prior')
         if self.add_uniform_prior:
             if params.get('no_edge_prior') is not None:
                 prior = np.zeros(self.num_edge_types)
@@ -82,7 +82,7 @@ class DNRI(nn.Module):
         all_predictions = []
         all_priors = []
         hard_sample = (not is_train) or self.train_hard_sample
-        prior_logits, posterior_logits, _ = self.encoder(inputs[:, :-1])
+        prior_logits, _ = self.encoder(inputs[:, :-1])
         if not is_train:
             teacher_forcing_steps = self.val_teacher_forcing_steps
         else:
@@ -92,27 +92,23 @@ class DNRI(nn.Module):
                 current_inputs = inputs[:, step]
             else:
                 current_inputs = predictions
-            if not use_prior_logits:
-                current_p_logits = posterior_logits[:, step]
-            else:
-                current_p_logits = prior_logits[:, step]
+            current_p_logits = prior_logits[:, step]
             predictions, decoder_hidden, edges = self.single_step_forward(current_inputs, decoder_hidden, current_p_logits, hard_sample)
             all_predictions.append(predictions)
             all_edges.append(edges)
         all_predictions = torch.stack(all_predictions, dim=1)
         target = inputs[:, 1:, :, :]
         loss_nll = self.nll(all_predictions, target)
-        prob = F.softmax(posterior_logits, dim=-1)
-        loss_kl = self.kl_categorical_learned(prob, prior_logits)
+        prob = F.softmax(prior_logits, dim=-1)
         if self.add_uniform_prior:
-            loss_kl = 0.5*loss_kl + 0.5*self.kl_categorical_avg(prob)
+            loss_kl = self.kl_categorical_avg(prob)
         loss = loss_nll + self.kl_coef*loss_kl
         loss = loss.mean()
 
         if return_edges:
             return loss, loss_nll, loss_kl, edges
         elif return_logits:
-            return loss, loss_nll, loss_kl, posterior_logits, all_predictions
+            return loss, loss_nll, loss_kl, prior_logits, all_predictions
         else:
             return loss, loss_nll, loss_kl
 
@@ -121,7 +117,7 @@ class DNRI(nn.Module):
         decoder_hidden = self.decoder.get_initial_hidden(inputs)
         all_predictions = []
         all_edges = []
-        prior_logits, _, prior_hidden = self.encoder(inputs[:, :-1])
+        prior_logits, prior_hidden = self.encoder(inputs[:, :-1])
         for step in range(burn_in_timesteps-1):
             current_inputs = inputs[:, step]
             current_edge_logits = prior_logits[:, step]
@@ -161,7 +157,7 @@ class DNRI(nn.Module):
 
     def predict_future_fixedwindow(self, inputs, burn_in_steps, prediction_steps, batch_size, return_edges=False):
         print("INPUT SHAPE: ",inputs.shape)
-        prior_logits, _, prior_hidden = self.encoder(inputs[:, :-1])
+        prior_logits, prior_hidden = self.encoder(inputs[:, :-1])
         decoder_hidden = self.decoder.get_initial_hidden(inputs)
         for step in range(burn_in_steps-1):
             current_inputs = inputs[:, step]
