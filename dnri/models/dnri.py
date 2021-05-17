@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from torch.nn import init
 import torch.nn.functional as F
+from torch.distributions.normal import Normal
 from copy import deepcopy
 import numpy as np
 from . import model_utils
@@ -42,7 +43,7 @@ class DNRI(nn.Module):
         self.burn_in_steps = params.get('train_burn_in_steps')
         self.teacher_forcing_prior = params.get('teacher_forcing_prior', False)
         self.val_teacher_forcing_steps = params.get('val_teacher_forcing_steps', -1)
-        self.add_uniform_prior = True#params.get('add_uniform_prior')
+        self.add_uniform_prior = True #params.get('add_uniform_prior')
         if self.add_uniform_prior:
             if params.get('no_edge_prior') is not None:
                 prior = np.zeros(self.num_edge_types)
@@ -66,20 +67,102 @@ class DNRI(nn.Module):
                     log_prior = log_prior.cuda(non_blocking=True)
                 self.log_prior = log_prior
 
+    def single_step_Critic(self, inputs, decoder_hidden, edge_logits, hard_sample):
+        old_shape = edge_logits.shape
+        edges = model_utils.gumbel_softmax(
+            edge_logits.reshape(-1, self.num_edge_types), 
+            tau=self.gumbel_temp, 
+            hard=hard_sample).view(old_shape)
+        predictions, decoder_hidden, hidden_pred = self.decoder(inputs, decoder_hidden, edges)
+
+        q1_critic, q2_critic = self.decoder.q_net(hidden_pred.detach(), predictions.detach())
+
+        q1_target, q2_target = self.decoder_targ.q_net(hidden_pred.detach(), predictions.detach())
+        q_pi_targ = torch.min(q1_target, q2_target)
+        
+        return predictions, decoder_hidden, q1_critic, q2_critic, q_pi_targ, edges
+    
+    def single_step_Actor(self, inputs, decoder_hidden, edge_logits, hard_sample):
+        old_shape = edge_logits.shape
+        edges = model_utils.gumbel_softmax(
+            edge_logits.reshape(-1, self.num_edge_types), 
+            tau=self.gumbel_temp, 
+            hard=hard_sample).view(old_shape)
+        predictions, decoder_hidden, hidden_pred = self.decoder(inputs, decoder_hidden, edges)
+        
+        q1_policy, q2_policy = self.decoder.q_net(hidden_pred.detach(), predictions)
+        q_pi_critic = torch.min(q1_policy, q2_policy)
+        
+        return predictions, decoder_hidden, q_pi_critic, edges
+    
     def single_step_forward(self, inputs, decoder_hidden, edge_logits, hard_sample):
         old_shape = edge_logits.shape
         edges = model_utils.gumbel_softmax(
             edge_logits.reshape(-1, self.num_edge_types), 
             tau=self.gumbel_temp, 
             hard=hard_sample).view(old_shape)
-        predictions, decoder_hidden = self.decoder(inputs, decoder_hidden, edges)
+        predictions, decoder_hidden, _ = self.decoder(inputs, decoder_hidden, edges)
         return predictions, decoder_hidden, edges
-
-    def calculate_loss(self, inputs, is_train=False, teacher_forcing=True, return_edges=False, return_logits=False, use_prior_logits=False):
+    
+    def calculate_loss_q(self, inputs, is_train=False, teacher_forcing=True, return_edges=False, return_logits=False, use_prior_logits=False):
         decoder_hidden = self.decoder.get_initial_hidden(inputs)
         num_time_steps = inputs.size(1)
         all_edges = []
         all_predictions = []
+
+        all_q1_c = []
+        all_q2_c = []
+        all_q_target = []
+
+        all_priors = []
+        hard_sample = (not is_train) or self.train_hard_sample
+        prior_logits, _ = self.encoder(inputs[:, :-1])
+        if not is_train:
+            teacher_forcing_steps = self.val_teacher_forcing_steps
+        else:
+            teacher_forcing_steps = self.teacher_forcing_steps
+        
+        # we change the number of steps from (num_time_steps-1), to num_time_steps
+        # as we need to get the q_target values of the next states
+        for step in range(num_time_steps):
+            if (teacher_forcing and (teacher_forcing_steps == -1 or step < teacher_forcing_steps)) or step == 0:
+                current_inputs = inputs[:, step]
+            else:
+                current_inputs = predictions
+
+            current_p_logits = prior_logits[:, step]
+            predictions, decoder_hidden, q1_critic, q2_critic, q_pi_targ, edges = self.single_step_Critic(current_inputs, decoder_hidden, current_p_logits, hard_sample)
+            all_predictions.append(predictions)
+            all_q1_c.append(q1_critic)
+            all_q2_c.append(q2_critic)
+            all_q_target.append(q_pi_targ)
+            all_edges.append(edges)
+        all_predictions = torch.stack(all_predictions, dim=1)
+        all_q1_c = torch.stack(all_q1_c, dim=1)
+        all_q2_c = torch.stack(all_q2_c, dim=1)
+        all_q_target = torch.stack(all_q_target, dim=1)
+
+        target = inputs[:, 1:, :, :]
+        # removed the last all_predictions as the last for looping was essentially to calculate q_target and log_pi
+        loss_nll = self.nll(all_predictions[:, :-1], target)
+        # for i in range(loss_nll.shape[1]):
+        #     print(all_predictions[0, i,0].cpu().detach().numpy(), target[0,i,0].cpu().detach().numpy())
+
+        # critic loss
+        gamma = 0.99
+        rewards_to_go = -1.*loss_nll + gamma * (all_q_target[:, 1:].mean(dim=-1))
+        rewards_to_go[:, -1] = -1.*loss_nll[:, -1] # assuming finite-horizon MDP
+        loss_critic = ((all_q1_c[:, :-1].mean(dim=-1) - rewards_to_go.detach())**2).mean() + ((all_q2_c[:, :-1].mean(dim=-1) - rewards_to_go.detach())**2).mean()
+
+        return loss_critic, loss_nll.mean(dim=-1).mean(dim=-1)
+    
+    def calculate_loss_pi(self, inputs, is_train=False, teacher_forcing=True, return_edges=False, return_logits=False, use_prior_logits=False):
+        decoder_hidden = self.decoder.get_initial_hidden(inputs)
+        num_time_steps = inputs.size(1)
+        all_edges = []
+        all_predictions = []
+        all_q_pi = []
+        all_q_g = []
         all_priors = []
         hard_sample = (not is_train) or self.train_hard_sample
         prior_logits, _ = self.encoder(inputs[:, :-1])
@@ -92,25 +175,31 @@ class DNRI(nn.Module):
                 current_inputs = inputs[:, step]
             else:
                 current_inputs = predictions
+
             current_p_logits = prior_logits[:, step]
-            predictions, decoder_hidden, edges = self.single_step_forward(current_inputs, decoder_hidden, current_p_logits, hard_sample)
+            predictions, decoder_hidden, q_pi_critic, edges = self.single_step_Actor(current_inputs, decoder_hidden, current_p_logits, hard_sample)
             all_predictions.append(predictions)
+            all_q_pi.append(q_pi_critic)
             all_edges.append(edges)
         all_predictions = torch.stack(all_predictions, dim=1)
-        target = inputs[:, 1:, :, :]
-        loss_nll = self.nll(all_predictions, target)
-        prob = F.softmax(prior_logits, dim=-1)
+        all_q_pi = torch.stack(all_q_pi, dim=1)
+
+        # actor loss
+        loss_policy = - all_q_pi.mean(dim=-1)
+
+        prob_pr = F.softmax(prior_logits, dim=-1)
         if self.add_uniform_prior:
-            loss_kl = self.kl_categorical_avg(prob)
-        loss = loss_nll + self.kl_coef*loss_kl
-        loss = loss.mean()
+            loss_kl = self.kl_categorical_avg(prob_pr)
+
+        loss = loss_policy.mean() + loss_kl.mean()
 
         if return_edges:
-            return loss, loss_nll, loss_kl, edges
+            return loss, loss_policy, loss_kl, edges
         elif return_logits:
-            return loss, loss_nll, loss_kl, prior_logits, all_predictions
+            return loss, loss_policy, loss_kl, prior_logits, all_predictions
         else:
-            return loss, loss_nll, loss_kl
+            return loss, loss_policy, loss_kl
+
 
     def predict_future(self, inputs, prediction_steps, return_edges=False, return_everything=False):
         burn_in_timesteps = inputs.size(1)
@@ -221,7 +310,7 @@ class DNRI(nn.Module):
         if self.normalize_nll_per_var:
             return neg_log_p.sum() / (target.size(0) * target.size(2))
         elif self.normalize_nll:
-            return (neg_log_p.sum(-1) ).view(preds.size(0), -1).mean(dim=1)
+            return (neg_log_p.sum(-1) )#.view(preds.size(0), -1).mean(dim=1)
         else:
             return neg_log_p.view(target.size(0), -1).sum() / (target.size(1))
 
@@ -252,7 +341,7 @@ class DNRI(nn.Module):
         avg_preds = preds.mean(dim=2)
         kl_div = avg_preds*(torch.log(avg_preds+eps) - self.log_prior)
         if self.normalize_kl:     
-            return kl_div.sum(-1).view(preds.size(0), -1).mean(dim=1)
+            return kl_div.sum(-1).view(preds.size(0), -1)#.mean(dim=1)
         elif self.normalize_kl_per_var:
             return kl_div.sum() / (self.num_vars * preds.size(0))
         else:
@@ -443,6 +532,31 @@ class DNRI_Encoder(nn.Module):
         prior_state = (prior_state[0].view(old_prior_shape), prior_state[1].view(old_prior_shape))
         return prior_result, prior_state
 
+class MLPQFunction(nn.Module):
+
+    def __init__(self, obs_dim, act_dim, hidden_size):
+        super().__init__()
+        self.q1_layer1 = nn.Linear(obs_dim + act_dim, hidden_size)
+        self.q2_layer1 = nn.Linear(obs_dim + act_dim, hidden_size)
+
+        self.q1_layer2 = nn.Linear(hidden_size, hidden_size)
+        self.q2_layer2 = nn.Linear(hidden_size, hidden_size)
+        self.q1_layer3 = nn.Linear(hidden_size, hidden_size)
+        self.q2_layer3 = nn.Linear(hidden_size, hidden_size)
+
+        self.q1_layer4 = nn.Linear(hidden_size, 1)
+        self.q2_layer4 = nn.Linear(hidden_size, 1)
+
+    def forward(self, q_input, pi_action):
+        q1_l1 = self.q1_layer1( torch.cat([q_input, pi_action], dim=-1) )
+        q2_l1 = self.q2_layer1( torch.cat([q_input, pi_action], dim=-1) )
+        q1_l2 = self.q1_layer2( F.relu(q1_l1) )
+        q2_l2 = self.q2_layer2( F.relu(q2_l1) )
+        q1_l3 = self.q1_layer3( F.relu(q1_l2) )
+        q2_l3 = self.q2_layer3( F.relu(q2_l2) )
+        q1 = self.q1_layer4( F.relu(q1_l3) )
+        q2 = self.q2_layer4( F.relu(q2_l3) )
+        return q1, q2
     
 class DNRI_Decoder(nn.Module):
     def __init__(self, params):
@@ -475,7 +589,11 @@ class DNRI_Decoder(nn.Module):
 
         self.out_fc1 = nn.Linear(n_hid, n_hid)
         self.out_fc2 = nn.Linear(n_hid, n_hid)
-        self.out_fc3 = nn.Linear(n_hid, out_size)
+        
+        self.mu_layer = nn.Linear(n_hid, out_size)
+        self.log_std_layer = nn.Linear(n_hid, out_size)
+
+        self.q_net = MLPQFunction(n_hid, out_size, n_hid)
 
         print('Using learned recurrent interaction net decoder.')
 
@@ -547,11 +665,19 @@ class DNRI_Decoder(nn.Module):
         # Output MLP
         pred = F.dropout(F.relu(self.out_fc1(hidden)), p=dropout_prob)
         pred = F.dropout(F.relu(self.out_fc2(pred)), p=dropout_prob)
-        pred = self.out_fc3(pred)
 
-        pred = inputs + pred
+        mu = self.mu_layer(pred)
+        log_std = self.log_std_layer(pred)
+        log_std = torch.clamp(log_std - 3.5, -4, -3)
+        std = torch.exp(log_std)
 
-        return pred, hidden
+        pi_distribution = Normal(mu, std)
+        if self.training:
+            pi_action = pi_distribution.rsample()
+        else:
+            pi_action = mu
+
+        return inputs.detach() + pi_action, hidden, pred.clone()
 
 
 class DNRI_MLP_Decoder(nn.Module):
@@ -577,7 +703,11 @@ class DNRI_MLP_Decoder(nn.Module):
         out_size = n_in_node
         self.out_fc1 = nn.Linear(in_size + msg_out, n_hid)
         self.out_fc2 = nn.Linear(n_hid, n_hid)
-        self.out_fc3 = nn.Linear(n_hid, out_size)
+        
+        self.mu_layer = nn.Linear(n_hid, out_size)
+        self.log_std_layer = nn.Linear(n_hid, out_size)
+
+        self.q_net = MLPQFunction(n_hid, out_size, n_hid)
 
         print('Using learned interaction net decoder.')
 
@@ -638,7 +768,17 @@ class DNRI_MLP_Decoder(nn.Module):
         # Output MLP
         pred = F.dropout(F.relu(self.out_fc1(aug_inputs)), p=p)
         pred = F.dropout(F.relu(self.out_fc2(pred)), p=p)
-        pred = self.out_fc3(pred)
+        
+        mu = self.mu_layer(pred)
+        log_std = self.log_std_layer(pred)
+        log_std = torch.clamp(log_std - 3.5, -4, -3)
+        std = torch.exp(log_std)
+
+        pi_distribution = Normal(mu, std)
+        if self.training:
+            pi_action = pi_distribution.rsample()
+        else:
+            pi_action = mu
 
         # Predict position/velocity difference
-        return inputs + pred, None
+        return inputs.detach() + pi_action, None, pred.clone()
