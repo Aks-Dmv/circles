@@ -116,7 +116,7 @@ class DNRI(nn.Module):
 
         all_priors = []
         hard_sample = (not is_train) or self.train_hard_sample
-        prior_logits, _ = self.encoder(inputs[:, :-1])
+        prior_logits, _ = self.encoder(inputs)
         if not is_train:
             teacher_forcing_steps = self.val_teacher_forcing_steps
         else:
@@ -165,7 +165,7 @@ class DNRI(nn.Module):
         all_q_g = []
         all_priors = []
         hard_sample = (not is_train) or self.train_hard_sample
-        prior_logits, _ = self.encoder(inputs[:, :-1])
+        prior_logits, _ = self.encoder(inputs)
         if not is_train:
             teacher_forcing_steps = self.val_teacher_forcing_steps
         else:
