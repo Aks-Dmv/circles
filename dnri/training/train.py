@@ -88,7 +88,7 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
                 loss_critic, loss_nll = model.calculate_loss_q(inputs, is_train=True, return_logits=True)
                 loss_critic.backward()
                 #print(loss_critic,"crit","0.9",epoch)
-                print(loss_nll,"nll")
+                #print(loss_nll,"nll")
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 q_opt.step()
                 q_opt.zero_grad()
@@ -111,7 +111,7 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
             opt.zero_grad()
             for _ in range(1):
                 loss, loss_policy, loss_kl, logits, _ = model.calculate_loss_pi(inputs, is_train=True, return_logits=True)
-                if epoch > 50 and epoch%5 != 0:
+                if epoch > 50 and epoch%2 != 0:
                     loss.backward() 
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)      
                     opt.step()
