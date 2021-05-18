@@ -149,7 +149,7 @@ class DNRI(nn.Module):
         #     print(all_predictions[0, i,0].cpu().detach().numpy(), target[0,i,0].cpu().detach().numpy())
 
         # critic loss
-        gamma = 0.99
+        gamma = 0.25
         rewards_to_go = -1.*loss_nll + gamma * (all_q_target[:, 1:].mean(dim=-1))
         rewards_to_go[:, -1] = -1.*loss_nll[:, -1] # assuming finite-horizon MDP
         loss_critic = ((all_q1_c[:, :-1].mean(dim=-1) - rewards_to_go.detach())**2).mean() + ((all_q2_c[:, :-1].mean(dim=-1) - rewards_to_go.detach())**2).mean()
@@ -185,6 +185,8 @@ class DNRI(nn.Module):
         all_q_pi = torch.stack(all_q_pi, dim=1)
 
         # actor loss
+        for i in range(inputs.shape[1]-1):
+            print(all_predictions[0,i].mean().cpu().item(), inputs[0,i].mean().cpu().item())
         loss_policy = - all_q_pi.mean(dim=-1)
 
         prob_pr = F.softmax(prior_logits, dim=-1)
@@ -677,7 +679,7 @@ class DNRI_Decoder(nn.Module):
         else:
             pi_action = mu
 
-        return inputs.detach() + pi_action, hidden, pred.clone()
+        return pi_action, hidden, pred.clone()
 
 
 class DNRI_MLP_Decoder(nn.Module):
@@ -781,4 +783,4 @@ class DNRI_MLP_Decoder(nn.Module):
             pi_action = mu
 
         # Predict position/velocity difference
-        return inputs.detach() + pi_action, None, pred.clone()
+        return pi_action, None, pred.clone()
