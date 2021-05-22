@@ -41,10 +41,10 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
     model_params = [param for param in model.parameters() if param.requires_grad]
     if params.get('use_adam', False):
         opt = torch.optim.Adam(model_params, lr=lr, weight_decay=wd)
-        q_opt = torch.optim.Adam(model.decoder.q_net.parameters(), lr=5*lr, weight_decay=wd)
+        q_opt = torch.optim.Adam(model.decoder.q_net.parameters(), lr=2*lr, weight_decay=wd)
     else:
         opt = torch.optim.SGD(model_params, lr=lr, weight_decay=wd, momentum=mom)
-        q_opt = torch.optim.SGD(model.decoder.q_net.parameters(), lr=5*lr, weight_decay=wd, momentum=mom)
+        q_opt = torch.optim.SGD(model.decoder.q_net.parameters(), lr=2*lr, weight_decay=wd, momentum=mom)
 
     working_dir = params['working_dir']
     best_path = os.path.join(working_dir, 'best_model')
@@ -84,7 +84,7 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
 
             q_opt.zero_grad()
             opt.zero_grad()
-            for _ in range(1):
+            for _ in range(3):
                 loss_critic, loss_nll = model.calculate_loss_q(inputs, is_train=True, return_logits=True)
                 loss_critic.backward()
                 #print(loss_critic,"crit","0.9",epoch)
@@ -99,7 +99,7 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
             # Finally, update Q_target networks by polyak averaging.
             # We only do it for the q_net, as we don't use the target policy
             with torch.no_grad():
-                polyak=0.8
+                polyak=0.9
                 for p, p_targ in zip(model.decoder.q_net.parameters(), model.decoder_targ.q_net.parameters()):
                     # NB: We use an in-place operations "mul_", "add_" to update target
                     # params, as opposed to "mul" and "add", which would make new tensors.
@@ -111,15 +111,16 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
             opt.zero_grad()
             for _ in range(1):
                 loss, loss_policy, loss_kl, logits, _ = model.calculate_loss_pi(inputs, is_train=True, return_logits=True)
-                if epoch > 50 and epoch%2 != 0:
+                if epoch > 20 and epoch%4 == 0:
                     loss.backward() 
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)      
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)      
                     opt.step()
                 opt.zero_grad()
                 q_opt.zero_grad()
             
-        # if training_scheduler is not None:
-        #     training_scheduler.step()
+        if training_scheduler is not None:
+            if epoch % 40 == 0:
+                training_scheduler.step()
         
         if train_writer is not None:
             train_writer.add_scalar('loss', loss.item(), global_step=epoch)
