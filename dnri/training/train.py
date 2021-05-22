@@ -119,8 +119,7 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
                 q_opt.zero_grad()
             
         if training_scheduler is not None:
-            if epoch % 40 == 0:
-                training_scheduler.step()
+            training_scheduler.step()
         
         if train_writer is not None:
             train_writer.add_scalar('loss', loss.item(), global_step=epoch)
