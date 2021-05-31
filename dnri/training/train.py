@@ -41,10 +41,10 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
     model_params = [param for param in model.parameters() if param.requires_grad]
     if params.get('use_adam', False):
         opt = torch.optim.Adam(model_params, lr=lr, weight_decay=wd)
-        q_opt = torch.optim.Adam(model.decoder.q_net.parameters(), lr=lr, weight_decay=wd)
+        q_opt = torch.optim.Adam(model.decoder.q_net.parameters(), lr=2*lr, weight_decay=wd)
     else:
         opt = torch.optim.SGD(model_params, lr=lr, weight_decay=wd, momentum=mom)
-        q_opt = torch.optim.SGD(model.decoder.q_net.parameters(), lr=lr, weight_decay=wd, momentum=mom)
+        q_opt = torch.optim.SGD(model.decoder.q_net.parameters(), lr=2*lr, weight_decay=wd, momentum=mom)
 
     working_dir = params['working_dir']
     best_path = os.path.join(working_dir, 'best_model')
@@ -84,12 +84,12 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
 
             q_opt.zero_grad()
             opt.zero_grad()
-            for _ in range(1):
+            for _ in range(3):
                 loss_critic, loss_nll = model.calculate_loss_q(inputs, is_train=True, return_logits=True)
                 loss_critic.backward()
                 #print(loss_critic,"crit","0.9",epoch)
                 #print(loss_nll,"nll")
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 2.0)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 q_opt.step()
                 q_opt.zero_grad()
                 opt.zero_grad()
@@ -113,7 +113,7 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
                 loss, loss_policy, loss_kl, logits, _ = model.calculate_loss_pi(inputs, is_train=True, return_logits=True)
                 if epoch > 20 and epoch%4 == 0:
                     loss.backward() 
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 2.0)      
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)      
                     opt.step()
                 opt.zero_grad()
                 q_opt.zero_grad()
