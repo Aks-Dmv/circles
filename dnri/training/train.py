@@ -109,7 +109,7 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
             # policy training
             q_opt.zero_grad()
             opt.zero_grad()
-            for _ in range(4):
+            for _ in range(1):
                 loss, loss_policy, loss_kl, logits, _ = model.calculate_loss_pi(inputs, is_train=True, return_logits=True)
                 if epoch > 20 and epoch%4 == 0:
                     loss.backward() 
