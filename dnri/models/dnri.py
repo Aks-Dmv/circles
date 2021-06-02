@@ -137,9 +137,9 @@ class DNRI(nn.Module):
 
         loss_fn = nn.BCEWithLogitsLoss()
         gen_states = self.discrim(all_predictions).flatten()
-        print((torch.sigmoid(gen_states)<0.2).sum())
+        print("fake ", (torch.sigmoid(gen_states)<0.4).sum().item(), (torch.sigmoid(gen_states)<0.3).sum().item(), (torch.sigmoid(gen_states)<0.2).sum().item())
         real_states = self.discrim(target).flatten()
-        print((torch.sigmoid(real_states)>0.8).sum())
+        print("real ", (torch.sigmoid(real_states)>0.6).sum().item(), (torch.sigmoid(real_states)>0.7).sum().item(), (torch.sigmoid(real_states)>0.8).sum().item())
         loss_discrim = loss_fn(gen_states, torch.zeros_like(gen_states)) + loss_fn(real_states, torch.ones_like(real_states))
 
         return loss_discrim
