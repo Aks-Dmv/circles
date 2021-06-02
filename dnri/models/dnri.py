@@ -185,8 +185,8 @@ class DNRI(nn.Module):
         all_q_pi = torch.stack(all_q_pi, dim=1)
 
         # actor loss
-        for i in range(0, inputs.shape[1]-1, 7):
-            print(all_predictions[0,i].mean().cpu().item(), inputs[0,i].mean().cpu().item())
+        # for i in range(0, inputs.shape[1]-1, 7):
+        #     print(all_predictions[0,i].mean().cpu().item(), inputs[0,i].mean().cpu().item())
         loss_policy = - all_q_pi.mean(dim=-1)
 
         prob_pr = F.softmax(prior_logits, dim=-1)
