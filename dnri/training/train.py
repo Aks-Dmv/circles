@@ -38,13 +38,17 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
     # don't send q_net params to policy optimizer
     for p in model.decoder.q_net.parameters():
         p.requires_grad = False
+    for p in model.discrim.parameters():
+        p.requires_grad = False
     model_params = [param for param in model.parameters() if param.requires_grad]
     if params.get('use_adam', False):
         opt = torch.optim.Adam(model_params, lr=lr, weight_decay=wd)
         q_opt = torch.optim.Adam(model.decoder.q_net.parameters(), lr=2*lr, weight_decay=wd)
+        d_opt = torch.optim.Adam(model.discrim.parameters(), lr=lr, weight_decay=wd)
     else:
         opt = torch.optim.SGD(model_params, lr=lr, weight_decay=wd, momentum=mom)
         q_opt = torch.optim.SGD(model.decoder.q_net.parameters(), lr=2*lr, weight_decay=wd, momentum=mom)
+        d_opt = torch.optim.Adam(model.discrim.parameters(), lr=lr, weight_decay=wd)
 
     working_dir = params['working_dir']
     best_path = os.path.join(working_dir, 'best_model')
@@ -84,6 +88,7 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
 
             q_opt.zero_grad()
             opt.zero_grad()
+            d_opt.zero_grad()
             for _ in range(6):
                 loss_critic, loss_nll = model.calculate_loss_q(inputs, is_train=True, return_logits=True)
                 loss_critic.backward()
@@ -93,6 +98,7 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
                 q_opt.step()
                 q_opt.zero_grad()
                 opt.zero_grad()
+                d_opt.zero_grad()
             for p in model.decoder.q_net.parameters():
                 p.requires_grad = False
 
@@ -106,9 +112,32 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
                     p_targ.data.mul_(polyak)
                     p_targ.data.add_((1 - polyak) * p.data)
 
+
+            # discrim training
+            for p in model.discrim.parameters():
+                p.requires_grad = True
+
+            q_opt.zero_grad()
+            d_opt.zero_grad()
+            opt.zero_grad()
+            if epoch%4 == 0:
+                for _ in range(2):
+                    loss_discrim = model.calculate_loss_discrim(inputs, is_train=True, return_logits=True)
+                    print(loss_discrim)
+                    loss_discrim.backward()
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+                    d_opt.step()
+                    q_opt.zero_grad()
+                    d_opt.zero_grad()
+                    opt.zero_grad()
+            
+            for p in model.discrim.parameters():
+                p.requires_grad = False
+
             # policy training
             q_opt.zero_grad()
             opt.zero_grad()
+            d_opt.zero_grad()
             for _ in range(1):
                 loss, loss_policy, loss_kl, logits, _ = model.calculate_loss_pi(inputs, is_train=True, return_logits=True)
                 if epoch%4 == 0:
@@ -117,6 +146,7 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
                     opt.step()
                 opt.zero_grad()
                 q_opt.zero_grad()
+                d_opt.zero_grad()
             
         if training_scheduler is not None:
             training_scheduler.step()

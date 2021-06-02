@@ -25,6 +25,8 @@ class DNRI(nn.Module):
         # Freeze target networks with respect to optimizers (only update via polyak averaging)
         for p in self.decoder_targ.parameters():
             p.requires_grad = False
+
+        self.discrim = MLP_Discriminator(params)
         self.num_edge_types = params.get('num_edge_types')
 
         # Training params
@@ -104,6 +106,42 @@ class DNRI(nn.Module):
         predictions, decoder_hidden, _ = self.decoder(inputs, decoder_hidden, edges)
         return predictions, decoder_hidden, edges
     
+    
+    def calculate_loss_discrim(self, inputs, is_train=False, teacher_forcing=True, return_edges=False, return_logits=False, use_prior_logits=False):
+        decoder_hidden = self.decoder.get_initial_hidden(inputs)
+        num_time_steps = inputs.size(1)
+        all_edges = []
+        all_predictions = []
+
+        all_priors = []
+        hard_sample = (not is_train) or self.train_hard_sample
+        prior_logits, _ = self.encoder(inputs)
+        if not is_train:
+            teacher_forcing_steps = self.val_teacher_forcing_steps
+        else:
+            teacher_forcing_steps = self.teacher_forcing_steps
+        
+        for step in range(num_time_steps-1):
+            if (teacher_forcing and (teacher_forcing_steps == -1 or step < teacher_forcing_steps)) or step == 0:
+                current_inputs = inputs[:, step]
+            else:
+                current_inputs = predictions
+
+            current_p_logits = prior_logits[:, step]
+            predictions, decoder_hidden, edges = self.single_step_forward(current_inputs, decoder_hidden, current_p_logits, hard_sample)
+            all_predictions.append(predictions)
+            all_edges.append(edges)
+        all_predictions = torch.stack(all_predictions, dim=1)
+
+        target = inputs[:, 1:, :, :]
+
+        gen_states = self.discrim(all_predictions).flatten()
+        real_states = self.discrim(target).flatten()
+        loss_discrim = nn.BCEWithLogitsLoss(gen_states, torch.zeros_like(gen_states)) + nn.BCEWithLogitsLoss(real_states, torch.ones_like(real_states))
+
+        return loss_discrim
+    
+
     def calculate_loss_q(self, inputs, is_train=False, teacher_forcing=True, return_edges=False, return_logits=False, use_prior_logits=False):
         decoder_hidden = self.decoder.get_initial_hidden(inputs)
         num_time_steps = inputs.size(1)
@@ -144,14 +182,15 @@ class DNRI(nn.Module):
 
         target = inputs[:, 1:, :, :]
         # removed the last all_predictions as the last for looping was essentially to calculate q_target and log_pi
-        loss_nll = self.nll(all_predictions[:, :-1], target)
+        loss_nll = self.nll(all_predictions[:, :-1], target) # old version
+        reward_discrim = -torch.log(1-torch.sigmoid(self.discrim(all_predictions[:, :-1]))+1e-5) # reward = log(D); D = rho_E/(rho_E + rho_pi)
         # for i in range(loss_nll.shape[1]):
         #     print(all_predictions[0, i,0].cpu().detach().numpy(), target[0,i,0].cpu().detach().numpy())
 
         # critic loss
         gamma = 0.25
-        rewards_to_go = -1.*loss_nll + gamma * (all_q_target[:, 1:].mean(dim=-1))
-        rewards_to_go[:, -1] = -1.*loss_nll[:, -1] # assuming finite-horizon MDP
+        rewards_to_go = reward_discrim + gamma * (all_q_target[:, 1:].mean(dim=-1))
+        rewards_to_go[:, -1] = reward_discrim[:, -1] # assuming finite-horizon MDP
         loss_critic = ((all_q1_c[:, :-1].mean(dim=-1) - rewards_to_go.detach())**2).mean() + ((all_q2_c[:, :-1].mean(dim=-1) - rewards_to_go.detach())**2).mean()
 
         return loss_critic, loss_nll.mean(dim=-1).mean(dim=-1)
@@ -533,6 +572,76 @@ class DNRI_Encoder(nn.Module):
         prior_result = self.prior_fc_out(x).view(old_shape[0], old_shape[1], self.num_edges)
         prior_state = (prior_state[0].view(old_prior_shape), prior_state[1].view(old_prior_shape))
         return prior_result, prior_state
+
+class MLP_Discriminator(nn.Module):
+    # Here, encoder also produces prior
+    def __init__(self, params):
+        super(DNRI_Encoder, self).__init__()
+        num_vars = params['num_vars']
+        no_bn = False
+        dropout = params['encoder_dropout']
+        edges = np.ones(num_vars) - np.eye(num_vars)
+        self.send_edges = np.where(edges)[0]
+        self.recv_edges = np.where(edges)[1]
+        self.edge2node_mat = nn.Parameter(torch.FloatTensor(encode_onehot(self.recv_edges).transpose()), requires_grad=False)
+        self.save_eval_memory = params.get('encoder_save_eval_memory', False)
+
+
+        hidden_size = params['encoder_hidden']
+        inp_size = params['input_size']
+        self.mlp1 = RefNRIMLP(inp_size, hidden_size, hidden_size, dropout, no_bn=no_bn)
+        self.mlp2 = RefNRIMLP(hidden_size * 2, hidden_size, hidden_size, dropout, no_bn=no_bn)
+        self.mlp3 = RefNRIMLP(hidden_size, hidden_size, hidden_size, dropout, no_bn=no_bn)
+
+        self.discrim_fc_out = nn.Linear(hidden_size, 1)
+
+        self.num_vars = num_vars
+        edges = np.ones(num_vars) - np.eye(num_vars)
+        self.send_edges = np.where(edges)[0]
+        self.recv_edges = np.where(edges)[1]
+
+        self.init_weights()
+
+    def init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_normal_(m.weight.data)
+                m.bias.data.fill_(0.1)
+
+    def node2edge(self, node_embeddings):
+        # Input size: [batch, num_vars, num_timesteps, embed_size]
+        if len(node_embeddings.shape) == 4:
+            send_embed = node_embeddings[:, self.send_edges, :, :]
+            recv_embed = node_embeddings[:, self.recv_edges, :, :]
+        else:
+            send_embed = node_embeddings[:, self.send_edges, :]
+            recv_embed = node_embeddings[:, self.recv_edges, :]
+        return torch.cat([send_embed, recv_embed], dim=-1)
+
+    def edge2node(self, edge_embeddings):
+        if len(edge_embeddings.shape) == 4:
+            old_shape = edge_embeddings.shape
+            tmp_embeddings = edge_embeddings.view(old_shape[0], old_shape[1], -1)
+            incoming = torch.matmul(self.edge2node_mat, tmp_embeddings).view(old_shape[0], -1, old_shape[2], old_shape[3])
+        else:
+            incoming = torch.matmul(self.edge2node_mat, edge_embeddings)
+        return incoming/(self.num_vars-1) #TODO: do we want this average?
+
+    def forward(self, inputs):
+        # Inputs is shape [batch, num_timesteps, num_vars, input_size]
+        num_timesteps = inputs.size(1)
+        x = inputs.transpose(2, 1).contiguous()
+        # New shape: [batch, num_vars, num_timesteps, num_dims]
+        x = self.mlp1(x)  # 2-layer ELU net per node
+        x = self.node2edge(x)
+        x = self.mlp2(x)
+        x = self.edge2node(x)
+        x = self.mlp3(x)
+        x = self.discrim_fc_out(x).transpose(2, 1).contiguous().mean(dim=-1)
+        # At this point, x should be [batch, num_timesteps, num_vars]
+
+        return x
+
 
 class MLPQFunction(nn.Module):
 
