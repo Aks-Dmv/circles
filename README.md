@@ -1,4 +1,4 @@
-# Code for the RL part of it
+# Code for the GAIL part of it
 
 Another minor modification to test branch pushing
 
