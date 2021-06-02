@@ -135,9 +135,12 @@ class DNRI(nn.Module):
 
         target = inputs[:, 1:, :, :]
 
+        loss_fn = nn.BCEWithLogitsLoss()
         gen_states = self.discrim(all_predictions).flatten()
+        print((torch.sigmoid(gen_states)<0.2).sum())
         real_states = self.discrim(target).flatten()
-        loss_discrim = nn.BCEWithLogitsLoss(gen_states, torch.zeros_like(gen_states)) + nn.BCEWithLogitsLoss(real_states, torch.ones_like(real_states))
+        print((torch.sigmoid(real_states)>0.8).sum())
+        loss_discrim = loss_fn(gen_states, torch.zeros_like(gen_states)) + loss_fn(real_states, torch.ones_like(real_states))
 
         return loss_discrim
     
@@ -576,7 +579,7 @@ class DNRI_Encoder(nn.Module):
 class MLP_Discriminator(nn.Module):
     # Here, encoder also produces prior
     def __init__(self, params):
-        super(DNRI_Encoder, self).__init__()
+        super(MLP_Discriminator, self).__init__()
         num_vars = params['num_vars']
         no_bn = False
         dropout = params['encoder_dropout']
@@ -587,13 +590,14 @@ class MLP_Discriminator(nn.Module):
         self.save_eval_memory = params.get('encoder_save_eval_memory', False)
 
 
-        hidden_size = params['encoder_hidden']
+        hidden_size = int(params['encoder_hidden']/4)
         inp_size = params['input_size']
         self.mlp1 = RefNRIMLP(inp_size, hidden_size, hidden_size, dropout, no_bn=no_bn)
         self.mlp2 = RefNRIMLP(hidden_size * 2, hidden_size, hidden_size, dropout, no_bn=no_bn)
         self.mlp3 = RefNRIMLP(hidden_size, hidden_size, hidden_size, dropout, no_bn=no_bn)
 
-        self.discrim_fc_out = nn.Linear(hidden_size, 1)
+        self.discrim_fc_out1 = nn.Linear(hidden_size, hidden_size)
+        self.discrim_fc_out2 = nn.Linear(hidden_size, 1)
 
         self.num_vars = num_vars
         edges = np.ones(num_vars) - np.eye(num_vars)
@@ -637,7 +641,8 @@ class MLP_Discriminator(nn.Module):
         x = self.mlp2(x)
         x = self.edge2node(x)
         x = self.mlp3(x)
-        x = self.discrim_fc_out(x).transpose(2, 1).contiguous().mean(dim=-1)
+        x = self.discrim_fc_out1(F.relu(x))
+        x = self.discrim_fc_out2(F.relu(x)).transpose(2, 1).contiguous().mean(dim=-1)
         # At this point, x should be [batch, num_timesteps, num_vars]
 
         return x
