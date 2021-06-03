@@ -146,8 +146,8 @@ class DNRI(nn.Module):
         real_states = self.discrim(target)
 
         # gradient penalty
-        alpha = torch.rand(target.shape[0], 1, 1, 1)
-        interpolates = alpha * target.detach() + (1 - alpha) * all_predictions.detach()
+        alpha = torch.rand(target.shape[0], 1, 1, 1).cuda()
+        interpolates = ( alpha * target.detach() + (1 - alpha) * all_predictions.detach() ).requires_grad_(True)
         d_interpolates = self.discrim(interpolates)
         gp_grad = torch.autograd.grad(
             inputs=interpolates,
@@ -156,7 +156,7 @@ class DNRI(nn.Module):
             create_graph=True,
             retain_graph=True,
         )[0]
-        gp_grad = gp_grad.view(gp_grad.shape[0], -1)
+        gp_grad = torch.reshape(gp_grad, (gp_grad.shape[0], -1))
         gp_grad_norm = gp_grad.norm(2, dim=1)
         gradient_penalty = torch.mean((gp_grad_norm - 1) ** 2)
 
