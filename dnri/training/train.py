@@ -120,12 +120,12 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
             q_opt.zero_grad()
             d_opt.zero_grad()
             opt.zero_grad()
-            for _ in range(1):
+            for _ in range(4):
                 loss_discrim = model.calculate_loss_discrim(inputs, is_train=True, return_logits=True)
                 print(loss_discrim)
-                if epoch%10 == 1:
+                if epoch%30 == 1:
                     loss_discrim.backward()
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+                    # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
                     d_opt.step()
                 q_opt.zero_grad()
                 d_opt.zero_grad()
