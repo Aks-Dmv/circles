@@ -160,7 +160,7 @@ class DNRI(nn.Module):
         gp_grad_norm = gp_grad.norm(2, dim=1)
         gradient_penalty = torch.mean((gp_grad_norm - 1) ** 2)
 
-        loss_discrim = -torch.mean(real_states) + torch.mean(gen_states) + 10 * gradient_penalty
+        loss_discrim = -torch.mean(real_states) + torch.mean(gen_states) + 5 * gradient_penalty
         print("fake ", torch.mean(gen_states).item(), " / real ", torch.mean(real_states).item() )
 
         return loss_discrim
