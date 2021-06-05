@@ -160,7 +160,7 @@ class DNRI(nn.Module):
         gp_grad_norm = gp_grad.norm(2, dim=1)
         gradient_penalty = torch.mean((gp_grad_norm - 1) ** 2)
 
-        loss_discrim = -torch.mean(real_states) + torch.mean(gen_states) + 5 * gradient_penalty
+        loss_discrim = (0.55-torch.mean(real_states))**2 + (0.45-torch.mean(gen_states))**2 + 30 * gradient_penalty
         print("fake ", torch.mean(gen_states).item(), " / real ", torch.mean(real_states).item() )
 
         return loss_discrim
@@ -207,7 +207,7 @@ class DNRI(nn.Module):
         target = inputs[:, 1:, :, :]
         # removed the last all_predictions as the last for looping was essentially to calculate q_target and log_pi
         loss_nll = self.nll(all_predictions[:, :-1], target) # old version
-        reward_discrim = self.discrim(all_predictions[:, :-1]) # wgan reward
+        reward_discrim = 10 * self.discrim(all_predictions[:, :-1]).detach() # wgan reward
         # reward_discrim = -torch.log(1-torch.sigmoid(self.discrim(all_predictions[:, :-1]))+1e-5) # reward = log(D); D = rho_E/(rho_E + rho_pi)
         # for i in range(loss_nll.shape[1]):
         #     print(all_predictions[0, i,0].cpu().detach().numpy(), target[0,i,0].cpu().detach().numpy())
