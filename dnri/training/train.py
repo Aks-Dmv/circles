@@ -114,7 +114,7 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
 
 
             # discrim training
-            if epoch%4 == 1:
+            if epoch%12 == 1:
                 for p in model.discrim.parameters():
                     p.requires_grad = True
 
@@ -124,7 +124,7 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
                 for _ in range(8):
                     loss_discrim = model.calculate_loss_discrim(inputs, is_train=True, return_logits=True)
                     loss_discrim.backward()
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                    # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                     d_opt.step()
                     q_opt.zero_grad()
                     d_opt.zero_grad()
