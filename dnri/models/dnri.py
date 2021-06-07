@@ -209,7 +209,7 @@ class DNRI(nn.Module):
         # removed the last all_predictions as the last for looping was essentially to calculate q_target and log_pi
         loss_nll = self.nll(all_predictions[:, :-1], target) # old version
         # reward_discrim = 10 * self.discrim(all_predictions[:, :-1]).detach() # wgan reward
-        reward_discrim = -torch.log(1-torch.sigmoid(self.discrim(all_predictions[:, :-1]))+1e-5) # reward = log(D); D = rho_E/(rho_E + rho_pi)
+        reward_discrim = -torch.log(1-torch.sigmoid(self.discrim(all_predictions[:, :-1]).detach())+1e-5) # reward = log(D); D = rho_E/(rho_E + rho_pi)
         # for i in range(loss_nll.shape[1]):
         #     print(all_predictions[0, i,0].cpu().detach().numpy(), target[0,i,0].cpu().detach().numpy())
 
