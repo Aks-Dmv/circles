@@ -161,7 +161,7 @@ class DNRI(nn.Module):
         gradient_penalty = torch.mean((gp_grad_norm - 1) ** 2)
 
         # loss_discrim = (0.55-torch.mean(real_states))**2 + (0.45-torch.mean(gen_states))**2 + 30 * gradient_penalty
-        loss_discrim = loss_fn(gen_states, torch.zeros_like(gen_states)) + loss_fn(real_states, torch.ones_like(real_states)) + 0.01 * gradient_penalty
+        loss_discrim = loss_fn(gen_states, torch.zeros_like(gen_states)) + loss_fn(real_states, torch.ones_like(real_states))# + 0.01 * gradient_penalty
         print("fake ", torch.mean(torch.sigmoid(gen_states)).item(), " / real ", torch.mean(torch.sigmoid(real_states)).item() )
 
         return loss_discrim
@@ -214,7 +214,7 @@ class DNRI(nn.Module):
         #     print(all_predictions[0, i,0].cpu().detach().numpy(), target[0,i,0].cpu().detach().numpy())
 
         # critic loss
-        print("reward ",reward_discrim.tolist()[0][30][0])
+        # print("reward ",reward_discrim.tolist()[0][30][0])
         gamma = 0.25
         rewards_to_go = reward_discrim + gamma * (all_q_target[:, 1:].mean(dim=-1))
         rewards_to_go[:, -1] = reward_discrim[:, -1] # assuming finite-horizon MDP
