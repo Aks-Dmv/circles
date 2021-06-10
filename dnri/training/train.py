@@ -121,24 +121,24 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
                 loss, loss_policy, loss_kl, logits, _ = model.calculate_loss_pi(inputs, is_train=True, return_logits=True)
                 if epoch%4 == 1:
                     loss.backward() 
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)      
+                    #torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)      
                     opt.step()
                 opt.zero_grad()
                 q_opt.zero_grad()
                 d_opt.zero_grad()
             
             # discrim training
-            if epoch%4 == 1:
+            if epoch<5 or epoch%4 == 1:
                 for p in model.discrim.parameters():
                     p.requires_grad = True
 
                 q_opt.zero_grad()
                 d_opt.zero_grad()
                 opt.zero_grad()
-                for _ in range(2):
+                for _ in range(1):
                     loss_discrim = model.calculate_loss_discrim(inputs, is_train=True, return_logits=True)
                     loss_discrim.backward()
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                    #torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                     d_opt.step()
                     q_opt.zero_grad()
                     d_opt.zero_grad()
