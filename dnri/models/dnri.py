@@ -107,7 +107,7 @@ class DNRI(nn.Module):
         return predictions, decoder_hidden, edges
     
     
-    def calculate_loss_discrim(self, inputs, is_train=False, teacher_forcing=True, return_edges=False, return_logits=False, use_prior_logits=False):
+    def calculate_loss_discrim(self, inputs, curr_epoch=0, is_train=False, teacher_forcing=True, return_edges=False, return_logits=False, use_prior_logits=False):
         decoder_hidden = self.decoder.get_initial_hidden(inputs)
         num_time_steps = inputs.size(1)
         all_edges = []
@@ -135,7 +135,8 @@ class DNRI(nn.Module):
 
         target = inputs[:, 1:, :, :]
 
-        loss_fn = nn.BCEWithLogitsLoss()
+        # loss_fn = nn.BCEWithLogitsLoss()
+        loss_fn = nn.MSELoss()
         # gen_states = self.discrim(all_predictions).flatten()
         # print("fake ",torch.sigmoid(gen_states).mean().item())
         # real_states = self.discrim(target).flatten()
@@ -146,23 +147,34 @@ class DNRI(nn.Module):
         real_states = self.discrim(target)
 
         # gradient penalty
-        alpha = torch.rand(target.shape[0], 1, 1, 1).cuda()
+        if True: #1) torch.rand(1)[0].item() > (curr_epoch/200.):
+            samp_factor = 0.1 + min(curr_epoch/400., 0.5)
+            alpha = torch.clamp(samp_factor * torch.randn(target.shape[0], 1, 1, 1), min=-0.999, max=0.999).cuda()
+        else:
+            alpha = torch.rand(target.shape[0], 1, 1, 1).cuda()
+        
         interpolates = ( alpha * target.detach() + (1 - alpha) * all_predictions.detach() ).requires_grad_(True)
         d_interpolates = self.discrim(interpolates)
-        gp_grad = torch.autograd.grad(
-            inputs=interpolates,
-            outputs=d_interpolates,
-            grad_outputs=torch.ones_like(d_interpolates),
-            create_graph=True,
-            retain_graph=True,
-        )[0]
-        gp_grad = torch.reshape(gp_grad, (gp_grad.shape[0], -1))
-        gp_grad_norm = gp_grad.norm(2, dim=1)
-        gradient_penalty = torch.mean((gp_grad_norm - 1) ** 2)
+        d_target = alpha.squeeze(-1).repeat(1, d_interpolates.shape[1], d_interpolates.shape[-1])
+        loss_discrim = loss_fn(d_interpolates, d_target)
+
+        # print([ round(elem, 2) for elem in d_interpolates[:10, 0,0].tolist()])
+        # print([ round(elem, 2) for elem in  d_target[:10,0, 0].tolist()])
+        # print("")      
+        # gp_grad = torch.autograd.grad(
+        #     inputs=interpolates,
+        #     outputs=d_interpolates,
+        #     grad_outputs=torch.ones_like(d_interpolates),
+        #     create_graph=True,
+        #     retain_graph=True,
+        # )[0]
+        # gp_grad = torch.reshape(gp_grad, (gp_grad.shape[0], -1))
+        # gp_grad_norm = gp_grad.norm(2, dim=1)
+        # gradient_penalty = torch.mean((gp_grad_norm - 1) ** 2)
 
         # loss_discrim = (0.55-torch.mean(real_states))**2 + (0.45-torch.mean(gen_states))**2 + 30 * gradient_penalty
-        loss_discrim = loss_fn(gen_states, torch.zeros_like(gen_states)) + loss_fn(real_states, torch.ones_like(real_states))# + 0.01 * gradient_penalty
-        print("fake ", torch.mean(torch.sigmoid(gen_states)).item(), " / real ", torch.mean(torch.sigmoid(real_states)).item() )
+        # loss_discrim = loss_fn(gen_states, torch.zeros_like(gen_states)) + loss_fn(real_states, torch.ones_like(real_states))# + 0.01 * gradient_penalty
+        # print("fake ", torch.mean(torch.sigmoid(gen_states)).item(), " / real ", torch.mean(torch.sigmoid(real_states)).item() )
 
         return loss_discrim
     
@@ -208,8 +220,8 @@ class DNRI(nn.Module):
         target = inputs[:, 1:, :, :]
         # removed the last all_predictions as the last for looping was essentially to calculate q_target and log_pi
         loss_nll = self.nll(all_predictions[:, :-1], target) # old version
-        # reward_discrim = 10 * self.discrim(all_predictions[:, :-1]).detach() # wgan reward
-        reward_discrim = -torch.log(1-torch.sigmoid(self.discrim(all_predictions[:, :-1]).detach())+1e-5) # reward = log(D); D = rho_E/(rho_E + rho_pi)
+        reward_discrim = self.discrim(all_predictions[:, :-1]).detach() # wgan reward
+        # reward_discrim = -torch.log(1-torch.sigmoid(self.discrim(all_predictions[:, :-1]).detach())+1e-5) # reward = log(D); D = rho_E/(rho_E + rho_pi)
         # for i in range(loss_nll.shape[1]):
         #     print(all_predictions[0, i,0].cpu().detach().numpy(), target[0,i,0].cpu().detach().numpy())
 
@@ -621,7 +633,8 @@ class MLP_Discriminator(nn.Module):
         self.mlp3 = RefNRIMLP(hidden_size, hidden_size, hidden_size, dropout, no_bn=no_bn)
 
         self.discrim_fc_out1 = nn.Linear(hidden_size, hidden_size)
-        self.discrim_fc_out2 = nn.Linear(hidden_size, 1)
+        self.discrim_fc_out2 = nn.Linear(hidden_size, hidden_size)
+        self.discrim_fc_out3 = nn.Linear(hidden_size, 1)
 
         self.num_vars = num_vars
         edges = np.ones(num_vars) - np.eye(num_vars)
@@ -666,7 +679,8 @@ class MLP_Discriminator(nn.Module):
         x = self.edge2node(x)
         x = self.mlp3(x)
         x = self.discrim_fc_out1(F.relu(x))
-        x = self.discrim_fc_out2(F.relu(x)).transpose(2, 1).contiguous().mean(dim=-1)
+        x = self.discrim_fc_out2(F.relu(x))
+        x = self.discrim_fc_out3(F.relu(x)).transpose(2, 1).contiguous().mean(dim=-1)
         # At this point, x should be [batch, num_timesteps, num_vars]
 
         return x
