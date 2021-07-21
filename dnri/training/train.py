@@ -122,7 +122,7 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
                 loss, loss_policy, loss_kl, logits, _ = model.calculate_loss_pi(inputs, is_train=True, return_logits=True)
                 if epoch >8 and epoch%4 == 1:
                     loss.backward() 
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)      
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)      
                     opt.step()
                 opt.zero_grad()
                 q_opt.zero_grad()

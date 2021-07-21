@@ -149,13 +149,13 @@ class DNRI(nn.Module):
         # gradient penalty
         if True: #1) torch.rand(1)[0].item() > (curr_epoch/200.):
             samp_factor = 0.1 + min(curr_epoch/400., 0.5)
-            alpha = torch.clamp(samp_factor * torch.randn(target.shape[0], 1, 1, 1), min=-0.999, max=0.999).cuda()
+            alpha = torch.clamp(samp_factor * torch.randn(target.shape[0], target.shape[1], 1, 1), min=-0.999, max=0.999).cuda()
         else:
             alpha = torch.rand(target.shape[0], 1, 1, 1).cuda()
         
         interpolates = ( alpha * target.detach() + (1 - alpha) * all_predictions.detach() ).requires_grad_(True)
         d_interpolates = self.discrim(interpolates)
-        d_target = alpha.squeeze(-1).repeat(1, d_interpolates.shape[1], d_interpolates.shape[-1])
+        d_target = alpha.squeeze(-1).repeat(1, 1, d_interpolates.shape[-1])
         loss_discrim = loss_fn(d_interpolates, d_target)
 
         # print([ round(elem, 2) for elem in d_interpolates[:10, 0,0].tolist()])
@@ -634,7 +634,8 @@ class MLP_Discriminator(nn.Module):
 
         self.discrim_fc_out1 = nn.Linear(hidden_size, hidden_size)
         self.discrim_fc_out2 = nn.Linear(hidden_size, hidden_size)
-        self.discrim_fc_out3 = nn.Linear(hidden_size, 1)
+        self.discrim_fc_out3 = nn.Linear(hidden_size, hidden_size)
+        self.discrim_fc_out4 = nn.Linear(hidden_size, 1)
 
         self.num_vars = num_vars
         edges = np.ones(num_vars) - np.eye(num_vars)
@@ -680,7 +681,8 @@ class MLP_Discriminator(nn.Module):
         x = self.mlp3(x)
         x = self.discrim_fc_out1(F.relu(x))
         x = self.discrim_fc_out2(F.relu(x))
-        x = self.discrim_fc_out3(F.relu(x)).transpose(2, 1).contiguous().mean(dim=-1)
+        x = self.discrim_fc_out3(F.relu(x))
+        x = self.discrim_fc_out4(F.relu(x)).transpose(2, 1).contiguous().mean(dim=-1)
         # At this point, x should be [batch, num_timesteps, num_vars]
 
         return x
