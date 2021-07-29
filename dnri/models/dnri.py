@@ -149,7 +149,7 @@ class DNRI(nn.Module):
         # gradient penalty
         if True: #1) torch.rand(1)[0].item() > (curr_epoch/200.):
             samp_factor = 0.1 + min(curr_epoch/400., 0.5)
-            alpha = torch.clamp(samp_factor * torch.randn(target.shape[0], target.shape[1], 1, 1), min=-0.999, max=0.999).cuda()
+            alpha = torch.clamp(samp_factor * torch.abs(torch.randn(target.shape[0], target.shape[1], 1, 1)), min=0, max=0.999).cuda()
         else:
             alpha = torch.rand(target.shape[0], 1, 1, 1).cuda()
         
