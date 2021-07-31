@@ -149,13 +149,14 @@ class DNRI(nn.Module):
         # gradient penalty
         if True: #1) torch.rand(1)[0].item() > (curr_epoch/200.):
             samp_factor = 0.1 + min(curr_epoch/400., 0.5)
-            alpha = torch.clamp(samp_factor * torch.abs(torch.randn(target.shape[0], target.shape[1], 1, 1)), min=0, max=0.999).cuda()
+            alpha = torch.clamp(samp_factor * torch.randn(target.shape[0], target.shape[1], 1, 1), min=-0.1, max=0.999).cuda()
         else:
             alpha = torch.rand(target.shape[0], 1, 1, 1).cuda()
         
         interpolates = ( alpha * target.detach() + (1 - alpha) * all_predictions.detach() ).requires_grad_(True)
         d_interpolates = self.discrim(interpolates)
         d_target = alpha.squeeze(-1).repeat(1, 1, d_interpolates.shape[-1])
+        d_target = d_target + 3*torch.clamp(d_target, min=0, max=0.999)
         loss_discrim = loss_fn(d_interpolates, d_target)
 
         # print([ round(elem, 2) for elem in d_interpolates[:10, 0,0].tolist()])
