@@ -129,11 +129,11 @@ class DNRI(nn.Module):
 
             current_p_logits = prior_logits[:, step]
             predictions, decoder_hidden, edges = self.single_step_forward(current_inputs, decoder_hidden, current_p_logits, hard_sample)
-            all_predictions.append(predictions)
+            all_predictions.append(torch.cat([current_inputs, predictions], dim=-1))
             all_edges.append(edges)
         all_predictions = torch.stack(all_predictions, dim=1)
 
-        target = inputs[:, 1:, :, :]
+        target = torch.cat([inputs[:, :-1, :, :], inputs[:, 1:, :, :]], dim=-1)
 
         # loss_fn = nn.BCEWithLogitsLoss()
         loss_fn = nn.MSELoss()
@@ -184,6 +184,7 @@ class DNRI(nn.Module):
         decoder_hidden = self.decoder.get_initial_hidden(inputs)
         num_time_steps = inputs.size(1)
         all_edges = []
+        all_prev_inputs = []
         all_predictions = []
 
         all_q1_c = []
@@ -209,11 +210,13 @@ class DNRI(nn.Module):
             current_p_logits = prior_logits[:, step]
             predictions, decoder_hidden, q1_critic, q2_critic, q_pi_targ, edges = self.single_step_Critic(current_inputs, decoder_hidden, current_p_logits, hard_sample)
             all_predictions.append(predictions)
+            all_prev_inputs.append(current_inputs)
             all_q1_c.append(q1_critic)
             all_q2_c.append(q2_critic)
             all_q_target.append(q_pi_targ)
             all_edges.append(edges)
         all_predictions = torch.stack(all_predictions, dim=1)
+        all_prev_inputs = torch.stack(all_prev_inputs, dim=1)
         all_q1_c = torch.stack(all_q1_c, dim=1)
         all_q2_c = torch.stack(all_q2_c, dim=1)
         all_q_target = torch.stack(all_q_target, dim=1)
@@ -221,7 +224,7 @@ class DNRI(nn.Module):
         target = inputs[:, 1:, :, :]
         # removed the last all_predictions as the last for looping was essentially to calculate q_target and log_pi
         loss_nll = self.nll(all_predictions[:, :-1], target) # old version
-        reward_discrim = self.discrim(all_predictions[:, :-1]).detach() # wgan reward
+        reward_discrim = self.discrim(torch.cat([all_prev_inputs[:, :-1], all_predictions[:, :-1]], dim=-1)).detach() # wgan reward
         # reward_discrim = -torch.log(1-torch.sigmoid(self.discrim(all_predictions[:, :-1]).detach())+1e-5) # reward = log(D); D = rho_E/(rho_E + rho_pi)
         # for i in range(loss_nll.shape[1]):
         #     print(all_predictions[0, i,0].cpu().detach().numpy(), target[0,i,0].cpu().detach().numpy())
@@ -628,7 +631,7 @@ class MLP_Discriminator(nn.Module):
 
 
         hidden_size = params['encoder_hidden']
-        inp_size = params['input_size']
+        inp_size = 2*params['input_size']
         self.mlp1 = RefNRIMLP(inp_size, hidden_size, hidden_size, dropout, no_bn=no_bn)
         self.mlp2 = RefNRIMLP(hidden_size * 2, hidden_size, hidden_size, dropout, no_bn=no_bn)
         self.mlp3 = RefNRIMLP(hidden_size, hidden_size, hidden_size, dropout, no_bn=no_bn)
@@ -928,7 +931,7 @@ class DNRI_MLP_Decoder(nn.Module):
         
         mu = self.mu_layer(pred)
         log_std = self.log_std_layer(pred)
-        log_std = torch.clamp(log_std - 3.5, -4, -3)
+        log_std = torch.clamp(log_std - 2.5, -3, -2)
         std = torch.exp(log_std)
 
         pi_distribution = Normal(mu, std)
