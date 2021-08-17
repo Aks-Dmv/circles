@@ -90,7 +90,7 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
             opt.zero_grad()
             d_opt.zero_grad()
             for _ in range(6):
-                loss_critic, loss_nll = model.calculate_loss_q(inputs, is_train=True, return_logits=True)
+                loss_critic, loss_nll = model.calculate_loss_q(inputs, curr_epoch=epoch, is_train=True, return_logits=True)
                 loss_critic.backward()
                 #print(loss_critic,"crit","0.9",epoch)
                 #print(loss_nll,"nll")
@@ -119,7 +119,7 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
             opt.zero_grad()
             d_opt.zero_grad()
             for _ in range(1):
-                loss, loss_policy, loss_kl, logits, _ = model.calculate_loss_pi(inputs, is_train=True, return_logits=True)
+                loss, loss_policy, loss_kl, logits, _ = model.calculate_loss_pi(inputs, curr_epoch=epoch, is_train=True, return_logits=True)
                 if epoch >8 and epoch%4 == 1:
                     loss.backward() 
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)      
@@ -137,7 +137,7 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
                 d_opt.zero_grad()
                 opt.zero_grad()
                 for _ in range(6):
-                    loss_discrim = model.calculate_loss_discrim(inputs, epoch, is_train=True, return_logits=True)
+                    loss_discrim = model.calculate_loss_discrim(inputs, curr_epoch=epoch, is_train=True, return_logits=True)
                     loss_discrim.backward()
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                     d_opt.step()

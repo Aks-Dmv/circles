@@ -122,7 +122,8 @@ class DNRI(nn.Module):
             teacher_forcing_steps = self.teacher_forcing_steps
         
         for step in range(num_time_steps-1):
-            if (teacher_forcing and (teacher_forcing_steps == -1 or step < teacher_forcing_steps)) or step == 0:
+            traj_forcing = torch.rand(1)[0].item() > ((curr_epoch-500)/1000.)
+            if (traj_forcing and teacher_forcing and (teacher_forcing_steps == -1 or step < teacher_forcing_steps)) or step == 0:
                 current_inputs = inputs[:, step]
             else:
                 current_inputs = predictions
@@ -180,7 +181,7 @@ class DNRI(nn.Module):
         return loss_discrim
     
 
-    def calculate_loss_q(self, inputs, is_train=False, teacher_forcing=True, return_edges=False, return_logits=False, use_prior_logits=False):
+    def calculate_loss_q(self, inputs, curr_epoch=0, is_train=False, teacher_forcing=True, return_edges=False, return_logits=False, use_prior_logits=False):
         decoder_hidden = self.decoder.get_initial_hidden(inputs)
         num_time_steps = inputs.size(1)
         all_edges = []
@@ -202,7 +203,8 @@ class DNRI(nn.Module):
         # we change the number of steps from (num_time_steps-1), to num_time_steps
         # as we need to get the q_target values of the next states
         for step in range(num_time_steps):
-            if (teacher_forcing and (teacher_forcing_steps == -1 or step < teacher_forcing_steps)) or step == 0:
+            traj_forcing = torch.rand(1)[0].item() > ((curr_epoch-500)/1000.)
+            if (traj_forcing and teacher_forcing and (teacher_forcing_steps == -1 or step < teacher_forcing_steps)) or step == 0:
                 current_inputs = inputs[:, step]
             else:
                 current_inputs = predictions
@@ -231,14 +233,14 @@ class DNRI(nn.Module):
 
         # critic loss
         # print("reward ",reward_discrim.tolist()[0][30][0])
-        gamma = 0.25
+        gamma = 0.9
         rewards_to_go = reward_discrim + gamma * (all_q_target[:, 1:].mean(dim=-1))
         rewards_to_go[:, -1] = reward_discrim[:, -1] # assuming finite-horizon MDP
         loss_critic = ((all_q1_c[:, :-1].mean(dim=-1) - rewards_to_go.detach())**2).mean() + ((all_q2_c[:, :-1].mean(dim=-1) - rewards_to_go.detach())**2).mean()
 
         return loss_critic, loss_nll.mean(dim=-1).mean(dim=-1)
     
-    def calculate_loss_pi(self, inputs, is_train=False, teacher_forcing=True, return_edges=False, return_logits=False, use_prior_logits=False):
+    def calculate_loss_pi(self, inputs, curr_epoch=0, is_train=False, teacher_forcing=True, return_edges=False, return_logits=False, use_prior_logits=False):
         decoder_hidden = self.decoder.get_initial_hidden(inputs)
         num_time_steps = inputs.size(1)
         all_edges = []
@@ -253,7 +255,8 @@ class DNRI(nn.Module):
         else:
             teacher_forcing_steps = self.teacher_forcing_steps
         for step in range(num_time_steps-1):
-            if (teacher_forcing and (teacher_forcing_steps == -1 or step < teacher_forcing_steps)) or step == 0:
+            traj_forcing = torch.rand(1)[0].item() > ((curr_epoch-500)/1000.)
+            if (traj_forcing and teacher_forcing and (teacher_forcing_steps == -1 or step < teacher_forcing_steps)) or step == 0:
                 current_inputs = inputs[:, step]
             else:
                 current_inputs = predictions
