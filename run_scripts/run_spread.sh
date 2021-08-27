@@ -6,7 +6,7 @@ GPU=2 # Set to whatever GPU you want to use
 DATA_PATH='data/spread/'
 mkdir -p $DATA_PATH
 # If for some reason you want to regenerate this data, uncomment this line
-python dnri/datasets/spread_synth_data.py --output_dir $DATA_PATH
+# python dnri/datasets/spread_synth_data.py --output_dir $DATA_PATH
 
 BASE_RESULTS_DIR="results/spread/"
 
