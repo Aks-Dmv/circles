@@ -104,6 +104,9 @@ def plot_sample(model, dataset, num_samples, params):
             ax.plot(unnormalized_gt[0, frame, 0, 0], unnormalized_gt[0, frame, 0, 1], 'bo')
             ax.plot(unnormalized_gt[0, frame, 1, 0], unnormalized_gt[0, frame, 1, 1], 'ro')
             ax.plot(unnormalized_gt[0, frame, 2, 0], unnormalized_gt[0, frame, 2, 1], 'go')
+            for i in range(2,5):
+                ax.plot(unnormalized_gt[0, frame, 0, 2*i], landmark_locs[0, i, 2*i+1],'bx')
+                ax.plot(unnormalized_gt[0, frame, 0, 2*i+6], landmark_locs[0, i, 2*i+7],'rx')
             if frame >= burn_in_steps:
                 tmp_fr = frame - burn_in_steps
                 ax.plot(unnormalized_preds[0, tmp_fr, 0, 0], unnormalized_preds[0, tmp_fr, 0, 1], 'bo', alpha=0.5)
