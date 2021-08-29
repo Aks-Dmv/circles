@@ -140,7 +140,7 @@ if __name__ == '__main__':
     misc.seed(args.seed)
 
     params['num_vars'] = 3
-    params['input_size'] = 18
+    params['input_size'] = 4 # 18 if spread
     params['input_time_steps'] = 50
     params['nll_loss_type'] = 'gaussian'
     train_data = SmallSynthData(args.data_path, 'train', params)
