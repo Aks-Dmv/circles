@@ -81,40 +81,106 @@ if __name__ == '__main__':
     num_sims = args.num_train + args.num_val + args.num_test
     flip_count = 0
     total_steps = 0
-    landmark_locs = np.random.uniform(-2, 2, size=(num_sims, 6, 2))
+    ################### 1) Spread code
+    # landmark_locs = np.random.uniform(-2, 2, size=(num_sims, 6, 2))
+    # for sim in range(num_sims):
+    #     agent_goals = np.zeros(3)
+
+    #     p_vels = np.random.uniform(-0.1, 0.1, size=(3, 2))
+    #     p_locs = np.random.uniform(-2, 2, size=(3, 2))
+
+    #     agent_locs = copy.deepcopy(p_locs)
+    #     landmarks_left = copy.deepcopy(landmark_locs[sim, :3])
+    #     blue_is= [0, 1, 2]
+    #     for _ in range(3):
+    #         blue_i = blue_is[0]
+
+    #         dists_ag = [np.linalg.norm(landmark_locs[sim, blue_i] - al) for al in agent_locs]
+    #         selected_agent = np.argmin(np.array(dists_ag))
+
+    #         dists_land = [np.linalg.norm(agent_locs[selected_agent]  - l) for l in landmarks_left]
+    #         selected_landmark = np.argmin(np.array(dists_land))
+
+    #         if dists_ag[selected_agent] < dists_land[selected_landmark]:
+    #             agent_goals[selected_agent] = blue_i
+    #             agent_locs[selected_agent] = 10
+    #             landmarks_left[blue_i] = 10
+    #             blue_is.remove(blue_i)
+    #         else:
+    #             agent_goals[selected_agent] = selected_landmark
+    #             agent_locs[selected_agent] = 10
+    #             landmarks_left[selected_landmark] = 10
+    #             blue_is.remove(selected_landmark)
+
+    #     current_feats = []
+    #     current_edges = []
+    #     for time_step in range(args.num_time_steps):
+    #         current_edge = np.array([1]*6)
+    #         current_edges.append(current_edge)
+
+    #         """
+    #         edge to node convertion (i.e. 0th row means 
+    #                                 edge sends 0th node data to 1st node)
+    #                                 3rd row means 
+    #                                 edge sends 1st node data to 2nd node)
+    #         [0, 1, 0],
+    #         [0, 0, 1],
+    #         [1, 0, 0],
+    #         [0, 0, 1],
+    #         [1, 0, 0],
+    #         [0, 1, 0]
+
+    #         """
+    #         for i in range(3):
+    #             norm = np.linalg.norm( landmark_locs[sim, int(agent_goals[i])] - p_locs[i] )
+    #             dir_1 = ( landmark_locs[sim, int(agent_goals[i])] - p_locs[i] )#/norm
+    #             p_vels[i] = args.push_factor*dir_1
+    #             if norm>0.5:
+    #                 p_vels[i] = 0.5*p_vels[i]/ norm
+    #             p_locs[i] += p_vels[i]
+
+    #         p1_feat = np.concatenate([p_locs[0], p_vels[0], landmark_locs[sim].flatten(), landmark_locs[sim,3]])
+    #         p2_feat = np.concatenate([p_locs[1], p_vels[1], landmark_locs[sim].flatten(), landmark_locs[sim,4]])
+    #         p3_feat = np.concatenate([p_locs[2], p_vels[2], landmark_locs[sim].flatten(), landmark_locs[sim,5]])
+    #         new_feat = np.stack([p1_feat, p2_feat, p3_feat])
+    #         current_feats.append(new_feat)
+    #     all_data.append(np.stack(current_feats))
+    #     all_edges.append(np.stack(current_edges))
+        
+    # all_data = np.stack(all_data)
+
+    # # for visualization of (1), uncomment the code below
+    # # unnormalized_gt = all_data # dataset.unnormalize(all_data)
+    # # fig, ax = plt.subplots()
+    # # def update(frame):
+    # #     ax.clear()
+    # #     ax.plot(unnormalized_gt[0, frame, 0, 0], unnormalized_gt[0, frame, 0, 1], 'bo', alpha=0.5)
+    # #     ax.plot(unnormalized_gt[0, frame, 1, 0], unnormalized_gt[0, frame, 1, 1], 'ro', alpha=0.5)
+    # #     ax.plot(unnormalized_gt[0, frame, 2, 0], unnormalized_gt[0, frame, 2, 1], 'go', alpha=0.5)
+    # #     for i in range(3):
+    # #         ax.plot(landmark_locs[0, i, 0], landmark_locs[0, i, 1],'bx')
+    # #         ax.plot(landmark_locs[0, i+3, 0], landmark_locs[0, i+3, 1],'rx')
+        
+    # #     ax.set_xlim(-2.5, 2.5)
+    # #     ax.set_ylim(-2.5, 2.5)
+    # # ani = animation.FuncAnimation(fig, update, interval=100, frames=30)
+    # # path = os.path.join('./', 'pred_trajectory_1.mp4')
+    # # ani.save(path, codec='mpeg4')
+
+    ################### 2) Multi-Modal Simple
+    landmark_locs = np.array([[0., 2.], [0., -2.]])
     for sim in range(num_sims):
-        agent_goals = np.zeros(3)
-
         p_vels = np.random.uniform(-0.1, 0.1, size=(3, 2))
-        p_locs = np.random.uniform(-2, 2, size=(3, 2))
+        p_locs = np.random.uniform(-0.1, 0.1, size=(3, 2))
+        p_locs[0,0] += 1
+        p_locs[2,0] -= 1
 
-        agent_locs = copy.deepcopy(p_locs)
-        landmarks_left = copy.deepcopy(landmark_locs[sim, :3])
-        blue_is= [0, 1, 2]
-        for _ in range(3):
-            blue_i = blue_is[0]
-
-            dists_ag = [np.linalg.norm(landmark_locs[sim, blue_i] - al) for al in agent_locs]
-            selected_agent = np.argmin(np.array(dists_ag))
-
-            dists_land = [np.linalg.norm(agent_locs[selected_agent]  - l) for l in landmarks_left]
-            selected_landmark = np.argmin(np.array(dists_land))
-
-            if dists_ag[selected_agent] < dists_land[selected_landmark]:
-                agent_goals[selected_agent] = blue_i
-                agent_locs[selected_agent] = 10
-                landmarks_left[blue_i] = 10
-                blue_is.remove(blue_i)
-            else:
-                agent_goals[selected_agent] = selected_landmark
-                agent_locs[selected_agent] = 10
-                landmarks_left[selected_landmark] = 10
-                blue_is.remove(selected_landmark)
+        landmark_i = 0 if np.random.uniform(-1,1) > 0 else 1
 
         current_feats = []
         current_edges = []
         for time_step in range(args.num_time_steps):
-            current_edge = np.array([1]*6)
+            current_edge = np.array([1]*6) # look at this later
             current_edges.append(current_edge)
 
             """
@@ -131,16 +197,16 @@ if __name__ == '__main__':
 
             """
             for i in range(3):
-                norm = np.linalg.norm( landmark_locs[sim, int(agent_goals[i])] - p_locs[i] )
-                dir_1 = ( landmark_locs[sim, int(agent_goals[i])] - p_locs[i] )#/norm
+                norm = np.linalg.norm( landmark_locs[landmark_i] - p_locs[i] )
+                dir_1 = ( landmark_locs[landmark_i] - p_locs[i] )#/norm
                 p_vels[i] = args.push_factor*dir_1
-                if norm>0.5:
-                    p_vels[i] = 0.5*p_vels[i]/ norm
+                if norm>0.3:
+                    p_vels[i] = 0.3*p_vels[i]/ norm
                 p_locs[i] += p_vels[i]
 
-            p1_feat = np.concatenate([p_locs[0], p_vels[0], landmark_locs[sim].flatten(), landmark_locs[sim,3]])
-            p2_feat = np.concatenate([p_locs[1], p_vels[1], landmark_locs[sim].flatten(), landmark_locs[sim,4]])
-            p3_feat = np.concatenate([p_locs[2], p_vels[2], landmark_locs[sim].flatten(), landmark_locs[sim,5]])
+            p1_feat = np.concatenate([p_locs[0], p_vels[0]])
+            p2_feat = np.concatenate([p_locs[1], p_vels[1]])
+            p3_feat = np.concatenate([p_locs[2], p_vels[2]])
             new_feat = np.stack([p1_feat, p2_feat, p3_feat])
             current_feats.append(new_feat)
         all_data.append(np.stack(current_feats))
@@ -148,7 +214,7 @@ if __name__ == '__main__':
         
     all_data = np.stack(all_data)
 
-    # for visualization, uncomment the code below
+    # for visualization of (2), uncomment the code below
     # unnormalized_gt = all_data # dataset.unnormalize(all_data)
     # fig, ax = plt.subplots()
     # def update(frame):
@@ -156,9 +222,9 @@ if __name__ == '__main__':
     #     ax.plot(unnormalized_gt[0, frame, 0, 0], unnormalized_gt[0, frame, 0, 1], 'bo', alpha=0.5)
     #     ax.plot(unnormalized_gt[0, frame, 1, 0], unnormalized_gt[0, frame, 1, 1], 'ro', alpha=0.5)
     #     ax.plot(unnormalized_gt[0, frame, 2, 0], unnormalized_gt[0, frame, 2, 1], 'go', alpha=0.5)
-    #     for i in range(3):
-    #         ax.plot(landmark_locs[0, i, 0], landmark_locs[0, i, 1],'bx')
-    #         ax.plot(landmark_locs[0, i+3, 0], landmark_locs[0, i+3, 1],'rx')
+
+    #     ax.plot(landmark_locs[0, 0], landmark_locs[0, 1],'bx')
+    #     ax.plot(landmark_locs[1, 0], landmark_locs[1, 1],'rx')
         
     #     ax.set_xlim(-2.5, 2.5)
     #     ax.set_ylim(-2.5, 2.5)
