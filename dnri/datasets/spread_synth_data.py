@@ -171,11 +171,9 @@ if __name__ == '__main__':
     landmark_locs = np.array([[0., 2.], [0., -2.]])
     for sim in range(num_sims):
         p_vels = np.random.uniform(-0.1, 0.1, size=(3, 2))
-        p_locs = np.random.uniform(-0.1, 0.1, size=(3, 2))
-        p_locs[0,0] += 1
-        p_locs[2,0] -= 1
+        p_locs = np.random.uniform(-1.5, 1.5, size=(3, 2))
 
-        landmark_i = 0 if np.random.uniform(-1,1) > 0 else 1
+        landmark_i = int(sim%2)
 
         current_feats = []
         current_edges = []
