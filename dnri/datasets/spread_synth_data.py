@@ -170,8 +170,10 @@ if __name__ == '__main__':
     ################### 2) Multi-Modal Simple
     landmark_locs = np.array([[0., 2.], [0., -2.]])
     for sim in range(num_sims):
-        p_vels = np.random.uniform(-0.1, 0.1, size=(3, 2))
-        p_locs = np.random.uniform(-1.5, 1.5, size=(3, 2))
+        p_vels = np.zeros((3,2))
+        p_locs = np.array([[-1.2, 0.], [0.6, 0.], [1.8, 0.]])
+        reached_origin = np.zeros(3)
+        sink = np.zeros((3,2))
 
         landmark_i = int(sim%2)
 
@@ -195,11 +197,14 @@ if __name__ == '__main__':
 
             """
             for i in range(3):
-                norm = np.linalg.norm( landmark_locs[landmark_i] - p_locs[i] )
-                dir_1 = ( landmark_locs[landmark_i] - p_locs[i] )#/norm
-                p_vels[i] = args.push_factor*dir_1
-                if norm>0.3:
-                    p_vels[i] = 0.3*p_vels[i]/ norm
+                if reached_origin[i] == 0 and p_locs[i,0] == 0:
+                    sink[i] = landmark_locs[landmark_i]
+                    reached_origin[i] = 1
+                norm = np.linalg.norm( sink[i] - p_locs[i] )
+                dir_1 = ( sink[i] - p_locs[i] )#/norm
+                p_vels[i] = dir_1
+                if norm>0.15:
+                    p_vels[i] = 0.15*p_vels[i]/ norm
                 p_locs[i] += p_vels[i]
 
             p1_feat = np.concatenate([p_locs[0], p_vels[0]])
