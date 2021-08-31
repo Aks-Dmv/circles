@@ -171,11 +171,9 @@ if __name__ == '__main__':
     landmark_locs = np.array([[0., 2.], [0., -2.]])
     for sim in range(num_sims):
         p_vels = np.zeros((3,2))
-        p_locs = np.array([[-1.2, 0.], [0.6, 0.], [1.8, 0.]])
-        reached_origin = np.zeros(3)
-        sink = np.zeros((3,2))
-
-        landmark_i = int(sim%2)
+        p_vels[:,0] += 0.05
+        p_vels[1:,0] += 0.1
+        p_locs = np.array([[-0.5, 0], [-2.0, 0], [-2.5, 0]])
 
         current_feats = []
         current_edges = []
@@ -197,14 +195,10 @@ if __name__ == '__main__':
 
             """
             for i in range(3):
-                if reached_origin[i] == 0 and p_locs[i,0] == 0:
-                    sink[i] = landmark_locs[landmark_i]
-                    reached_origin[i] = 1
-                norm = np.linalg.norm( sink[i] - p_locs[i] )
-                dir_1 = ( sink[i] - p_locs[i] )#/norm
-                p_vels[i] = dir_1
-                if norm>0.15:
-                    p_vels[i] = 0.15*p_vels[i]/ norm
+                if i>0 and np.linalg.norm( p_locs[i,0] - p_locs[0,0])<0.8:
+                    p_vels[i,1] = 0.2*(p_locs[i,0] - p_locs[0,0])*((-1)**sim)
+                else:
+                    p_vels[i,1] = 0
                 p_locs[i] += p_vels[i]
 
             p1_feat = np.concatenate([p_locs[0], p_vels[0]])
