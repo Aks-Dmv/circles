@@ -196,7 +196,7 @@ if __name__ == '__main__':
             """
             for i in range(3):
                 if i>0 and np.linalg.norm( p_locs[i,0] - p_locs[0,0])<0.8:
-                    p_vels[i,1] = 0.2*(p_locs[i,0] - p_locs[0,0])*((-1)**sim)
+                    p_vels[i,1] = 0.4*(p_locs[i,0] - p_locs[0,0])*((-1)**sim)
                 else:
                     p_vels[i,1] = 0
                 p_locs[i] += p_vels[i]
