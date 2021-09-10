@@ -1,0 +1,6 @@
+README.md
+setup.py
+dnri.egg-info/PKG-INFO
+dnri.egg-info/SOURCES.txt
+dnri.egg-info/dependency_links.txt
+dnri.egg-info/top_level.txt

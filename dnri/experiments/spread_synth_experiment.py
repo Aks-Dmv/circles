@@ -78,8 +78,8 @@ def plot_sample(model, dataset, num_samples, params):
     model.eval()
     batch_count = 0
     all_errors = []
-    burn_in_steps = 10
-    forward_pred_steps = 40
+    burn_in_steps = 2
+    forward_pred_steps = 48
     for batch_ind, batch in enumerate(data_loader):
         inputs = batch['inputs']
         gt_edges = batch.get('edges', None)
@@ -130,7 +130,7 @@ if __name__ == '__main__':
     parser.add_argument('--no_data_norm', action='store_true')
     parser.add_argument('--error_out_name', default='prediction_errors_%dstep.npy')
     parser.add_argument('--prior_variance', type=float, default=4e-2)
-    parser.add_argument('--test_burn_in_steps', type=int, default=10)
+    parser.add_argument('--test_burn_in_steps', type=int, default=2)
     parser.add_argument('--error_suffix')
     parser.add_argument('--subject_ind', type=int, default=-1)
 
