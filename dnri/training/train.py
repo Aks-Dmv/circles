@@ -129,14 +129,14 @@ def train(model, train_data, val_data, params, train_writer, val_writer):
                 d_opt.zero_grad()
             
             # discrim training
-            if True:
+            if epoch%4==1:
                 for p in model.discrim.parameters():
                     p.requires_grad = True
 
                 q_opt.zero_grad()
                 d_opt.zero_grad()
                 opt.zero_grad()
-                for _ in range(6):
+                for _ in range(2):
                     loss_discrim = model.calculate_loss_discrim(inputs, curr_epoch=epoch, is_train=True, return_logits=True)
                     loss_discrim.backward()
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
