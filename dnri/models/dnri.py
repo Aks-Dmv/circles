@@ -122,7 +122,7 @@ class DNRI(nn.Module):
             teacher_forcing_steps = self.teacher_forcing_steps
         
         for step in range(num_time_steps-1):
-            traj_forcing = torch.rand(1)[0].item() > ((curr_epoch-500)/1000.)
+            traj_forcing = (step%(int(1.5**(curr_epoch//50)))==0)
             if (traj_forcing and teacher_forcing and (teacher_forcing_steps == -1 or step < teacher_forcing_steps)) or step == 0:
                 current_inputs = inputs[:, step]
             else:
@@ -134,7 +134,7 @@ class DNRI(nn.Module):
             all_edges.append(edges)
         all_predictions = torch.stack(all_predictions, dim=1)
 
-        target = torch.cat([inputs[:, :-1, :, :], inputs[:, 1:, :, :]], dim=-1)
+        target = torch.cat([all_predictions[:,:,:,:4].detach(), inputs[:, 1:, :, :]], dim=-1)
 
         # loss_fn = nn.BCEWithLogitsLoss()
         loss_fn = nn.MSELoss()
@@ -157,7 +157,7 @@ class DNRI(nn.Module):
         interpolates = ( alpha * target.detach() + (1 - alpha) * all_predictions.detach() ).requires_grad_(True)
         d_interpolates = self.discrim(interpolates)
         d_target = alpha.squeeze(-1).repeat(1, 1, d_interpolates.shape[-1])
-        d_target = d_target - 0.6*torch.clamp(d_target, min=-1, max=0)
+        # d_target = d_target - 0.6*torch.clamp(d_target, min=-1, max=0)
         loss_discrim = loss_fn(d_interpolates, d_target)
 
         # print([ round(elem, 2) for elem in d_interpolates[:10, 0,0].tolist()])
@@ -203,7 +203,7 @@ class DNRI(nn.Module):
         # we change the number of steps from (num_time_steps-1), to num_time_steps
         # as we need to get the q_target values of the next states
         for step in range(num_time_steps):
-            traj_forcing = torch.rand(1)[0].item() > ((curr_epoch-500)/1000.)
+            traj_forcing = (step%(int(1.5**(curr_epoch//50)))==0)
             if (traj_forcing and teacher_forcing and (teacher_forcing_steps == -1 or step < teacher_forcing_steps)) or step == 0:
                 current_inputs = inputs[:, step]
             else:
@@ -238,7 +238,7 @@ class DNRI(nn.Module):
         rewards_to_go[:, -1] = reward_discrim[:, -1] # assuming finite-horizon MDP
         loss_critic = ((all_q1_c[:, :-1].mean(dim=-1) - rewards_to_go.detach())**2).mean() + ((all_q2_c[:, :-1].mean(dim=-1) - rewards_to_go.detach())**2).mean()
 
-        return loss_critic, loss_nll.mean(dim=-1).mean(dim=-1)
+        return loss_critic, loss_nll#.mean(dim=-1).mean(dim=-1)
     
     def calculate_loss_pi(self, inputs, curr_epoch=0, is_train=False, teacher_forcing=True, return_edges=False, return_logits=False, use_prior_logits=False):
         decoder_hidden = self.decoder.get_initial_hidden(inputs)
@@ -255,7 +255,7 @@ class DNRI(nn.Module):
         else:
             teacher_forcing_steps = self.teacher_forcing_steps
         for step in range(num_time_steps-1):
-            traj_forcing = torch.rand(1)[0].item() > ((curr_epoch-500)/1000.)
+            traj_forcing = (step%(int(1.5**(curr_epoch//50)))==0)
             if (traj_forcing and teacher_forcing and (teacher_forcing_steps == -1 or step < teacher_forcing_steps)) or step == 0:
                 current_inputs = inputs[:, step]
             else:
@@ -391,13 +391,20 @@ class DNRI(nn.Module):
             return self.nll_poisson(preds, target)
 
     def nll_gaussian(self, preds, target, add_const=False):
-        neg_log_p = ((preds - target) ** 2 / (2 * self.prior_variance))
-        const = 0.5 * np.log(2 * np.pi * self.prior_variance)
-        #neg_log_p += const
+        # for mocap, uncomment the below
+        # return ((preds - target) ** 2 / (2 * self.prior_variance)).sum(-1).mean(dim=-1).mean(dim=-1)
+        
+        neg_log_p = ((preds - target[0]) ** 2 / (2 * self.prior_variance))
+        neg_log_p = neg_log_p.sum(-1).mean(dim=-1).mean(dim=-1)
+        for mi in range(1, target.shape[0]):
+            temp_log_p = ((preds - target[mi]) ** 2 / (2 * self.prior_variance))
+            temp_log_p = temp_log_p.sum(-1).mean(dim=-1).mean(dim=-1)
+            neg_log_p = torch.min(neg_log_p, temp_log_p)
+
         if self.normalize_nll_per_var:
             return neg_log_p.sum() / (target.size(0) * target.size(2))
         elif self.normalize_nll:
-            return (neg_log_p.sum(-1) )#.view(preds.size(0), -1).mean(dim=1)
+            return neg_log_p
         else:
             return neg_log_p.view(target.size(0), -1).sum() / (target.size(1))
 
@@ -642,6 +649,11 @@ class MLP_Discriminator(nn.Module):
         self.discrim_fc_out1 = nn.Linear(hidden_size, hidden_size)
         self.discrim_fc_out2 = nn.Linear(hidden_size, hidden_size)
         self.discrim_fc_out3 = nn.Linear(hidden_size, hidden_size)
+        self.discrim_fc_out31 = nn.Linear(hidden_size, hidden_size)
+        self.discrim_fc_out32 = nn.Linear(hidden_size, hidden_size)
+        self.discrim_fc_out33 = nn.Linear(hidden_size, hidden_size)
+        self.discrim_fc_out34 = nn.Linear(hidden_size, hidden_size)
+        self.discrim_fc_out35 = nn.Linear(hidden_size, hidden_size)
         self.discrim_fc_out4 = nn.Linear(hidden_size, 1)
 
         self.num_vars = num_vars
@@ -689,6 +701,11 @@ class MLP_Discriminator(nn.Module):
         x = self.discrim_fc_out1(F.relu(x))
         x = self.discrim_fc_out2(F.relu(x))
         x = self.discrim_fc_out3(F.relu(x))
+        x = self.discrim_fc_out31(F.relu(x))
+        x = self.discrim_fc_out32(F.relu(x))
+        x = self.discrim_fc_out33(F.relu(x))
+        x = self.discrim_fc_out34(F.relu(x))
+        x = self.discrim_fc_out35(F.relu(x))
         x = self.discrim_fc_out4(F.relu(x)).transpose(2, 1).contiguous().mean(dim=-1)
         # At this point, x should be [batch, num_timesteps, num_vars]
 
@@ -840,7 +857,7 @@ class DNRI_Decoder(nn.Module):
         else:
             pi_action = mu
 
-        return pi_action, hidden, pred.clone()
+        return inputs + pi_action, hidden, pred.clone()
 
 
 class DNRI_MLP_Decoder(nn.Module):
@@ -944,4 +961,4 @@ class DNRI_MLP_Decoder(nn.Module):
             pi_action = mu
 
         # Predict position/velocity difference
-        return pi_action, None, pred.clone()
+        return inputs + pi_action, None, pred.clone()

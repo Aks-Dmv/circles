@@ -17,6 +17,8 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import matplotlib.colors as mcolors
 import numpy as np
+import seaborn as sns
+sns.set_theme()
 
 def eval_edges(model, dataset, params):
 
