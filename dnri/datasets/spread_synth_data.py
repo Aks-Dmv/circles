@@ -171,8 +171,8 @@ if __name__ == '__main__':
     landmark_locs = np.array([[0., 2.], [0., -2.]])
     for sim in range(num_sims):
         p_vels = np.zeros((3,2))
-        p_vels[:,0] += 0.02
-        p_vels[1:,0] += 0.08
+        p_vels[:,0] += 0.05
+        p_vels[1:,0] += 0.1
         p_locs = np.array([[-0.5, 0], [-2.0, 0], [-2.5, 0]])
 
         current_feats = []
@@ -196,8 +196,7 @@ if __name__ == '__main__':
             """
             for i in range(3):
                 if i>0 and np.linalg.norm( p_locs[i,0] - p_locs[0,0])<0.8:
-                    pl_move = p_locs[i,0] - p_locs[0,0] if p_locs[i,0] - p_locs[0,0] <0 else 0
-                    p_vels[i,1] = 0.1*(p_locs[i,0] - p_locs[0,0])*((-1)**sim)
+                    p_vels[i,1] = 0.4*(p_locs[i,0] - p_locs[0,0])*((-1)**sim)
                 else:
                     p_vels[i,1] = 0
                 p_locs[i] += p_vels[i]
