@@ -134,7 +134,7 @@ class DNRI(nn.Module):
             all_edges.append(edges)
         all_predictions = torch.stack(all_predictions, dim=1)
 
-        target = torch.cat([all_predictions[:,:,:,:4].detach(), inputs[:, 1:, :, :]], dim=-1)
+        target = torch.cat([all_predictions[:,:,:,:(inputs.shape[-1])].detach(), inputs[:, 1:, :, :]], dim=-1)
 
         # loss_fn = nn.BCEWithLogitsLoss()
         loss_fn = nn.MSELoss()
