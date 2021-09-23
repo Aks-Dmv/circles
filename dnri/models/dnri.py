@@ -210,7 +210,7 @@ class DNRI(nn.Module):
         
         # we change the number of steps from (num_time_steps-1), to num_time_steps
         # as we need to get the q_target values of the next states
-        alpha = (2*torch.rand(inputs.shape[0], 1, 1, 1) - 1).cuda()
+        alpha = (2*torch.rand(inputs.shape[0], 1, 1) - 1).cuda()
         for step in range(num_time_steps):
             traj_forcing = (step%(int(1.5**(curr_epoch//50)))==0)
             if (traj_forcing and teacher_forcing and (teacher_forcing_steps == -1 or step < teacher_forcing_steps)) or step == 0:
@@ -288,7 +288,7 @@ class DNRI(nn.Module):
             teacher_forcing_steps = self.val_teacher_forcing_steps
         else:
             teacher_forcing_steps = self.teacher_forcing_steps
-        alpha = (2*torch.rand(inputs.shape[0], 1, 1, 1) - 1).cuda()
+        alpha = (2*torch.rand(inputs.shape[0], 1, 1) - 1).cuda()
         for step in range(num_time_steps-1):
             traj_forcing = (step%(int(1.5**(curr_epoch//50)))==0)
             if (traj_forcing and teacher_forcing and (teacher_forcing_steps == -1 or step < teacher_forcing_steps)) or step == 0:
