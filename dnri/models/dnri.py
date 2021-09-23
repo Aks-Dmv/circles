@@ -144,8 +144,8 @@ class DNRI(nn.Module):
         # print("real ",torch.sigmoid(real_states).mean().item())
         # loss_discrim = loss_fn(gen_states, torch.zeros_like(gen_states)) + loss_fn(real_states, torch.ones_like(real_states))
 
-        gen_states = self.discrim(all_predictions)
-        real_states = self.discrim(target)
+        # gen_states = self.discrim(all_predictions)
+        # real_states = self.discrim(target)
 
         # gradient penalty
         if False: #1) torch.rand(1)[0].item() > (curr_epoch/200.):
@@ -183,6 +183,7 @@ class DNRI(nn.Module):
 
     def calculate_loss_q(self, inputs, curr_epoch=0, is_train=False, teacher_forcing=True, return_edges=False, return_logits=False, use_prior_logits=False):
         decoder_hidden = self.decoder.get_initial_hidden(inputs)
+        decoder_hidden_alpha = self.decoder.get_initial_hidden(inputs)
         num_time_steps = inputs.size(1)
         all_edges = []
         all_prev_inputs = []
@@ -191,6 +192,13 @@ class DNRI(nn.Module):
         all_q1_c = []
         all_q2_c = []
         all_q_target = []
+
+        all_prev_inputs_alpha = []
+        all_predictions_alpha = []
+
+        all_q1_c_alpha = []
+        all_q2_c_alpha = []
+        all_q_target_alpha = []
 
         all_priors = []
         hard_sample = (not is_train) or self.train_hard_sample
@@ -202,6 +210,7 @@ class DNRI(nn.Module):
         
         # we change the number of steps from (num_time_steps-1), to num_time_steps
         # as we need to get the q_target values of the next states
+        alpha = (2*torch.rand(inputs.shape[0], 1, 1, 1) - 1).cuda()
         for step in range(num_time_steps):
             traj_forcing = (step%(int(1.5**(curr_epoch//50)))==0)
             if (traj_forcing and teacher_forcing and (teacher_forcing_steps == -1 or step < teacher_forcing_steps)) or step == 0:
@@ -211,17 +220,32 @@ class DNRI(nn.Module):
 
             current_p_logits = prior_logits[:, step]
             predictions, decoder_hidden, q1_critic, q2_critic, q_pi_targ, edges = self.single_step_Critic(current_inputs, decoder_hidden, current_p_logits, hard_sample)
+
+            current_p_logits_alpha = prior_logits[:, step]
+            predictions_alpha, decoder_hidden_alpha, q1_critic_alpha, q2_critic_alpha, q_pi_targ_alpha, edges_alpha = self.single_step_Critic(alpha*inputs[:, step] + (1-alpha)*current_inputs, decoder_hidden_alpha, current_p_logits_alpha, hard_sample)
             all_predictions.append(predictions)
             all_prev_inputs.append(current_inputs)
             all_q1_c.append(q1_critic)
             all_q2_c.append(q2_critic)
             all_q_target.append(q_pi_targ)
             all_edges.append(edges)
+
+            all_predictions_alpha.append(predictions_alpha)
+            all_prev_inputs_alpha.append(alpha*inputs[:, step] + (1-alpha)*current_inputs)
+            all_q1_c_alpha.append(q1_critic_alpha)
+            all_q2_c_alpha.append(q2_critic_alpha)
+            all_q_target_alpha.append(q_pi_targ_alpha)
         all_predictions = torch.stack(all_predictions, dim=1)
         all_prev_inputs = torch.stack(all_prev_inputs, dim=1)
         all_q1_c = torch.stack(all_q1_c, dim=1)
         all_q2_c = torch.stack(all_q2_c, dim=1)
         all_q_target = torch.stack(all_q_target, dim=1)
+
+        all_predictions_alpha = torch.stack(all_predictions_alpha, dim=1)
+        all_prev_inputs_alpha = torch.stack(all_prev_inputs_alpha, dim=1)
+        all_q1_c_alpha = torch.stack(all_q1_c_alpha, dim=1)
+        all_q2_c_alpha = torch.stack(all_q2_c_alpha, dim=1)
+        all_q_target_alpha = torch.stack(all_q_target_alpha, dim=1)
 
         target = inputs[:, 1:, :, :]
         # removed the last all_predictions as the last for looping was essentially to calculate q_target and log_pi
@@ -230,6 +254,7 @@ class DNRI(nn.Module):
         # reward_discrim = -torch.log(1-torch.sigmoid(self.discrim(all_predictions[:, :-1]).detach())+1e-5) # reward = log(D); D = rho_E/(rho_E + rho_pi)
         # for i in range(loss_nll.shape[1]):
         #     print(all_predictions[0, i,0].cpu().detach().numpy(), target[0,i,0].cpu().detach().numpy())
+        reward_discrim_alpha = self.discrim(torch.cat([all_prev_inputs_alpha[:, :-1], all_predictions_alpha[:, :-1]], dim=-1)).detach() # wgan reward
 
         # critic loss
         # print("reward ",reward_discrim.tolist()[0][30][0])
@@ -238,14 +263,23 @@ class DNRI(nn.Module):
         rewards_to_go[:, -1] = reward_discrim[:, -1] # assuming finite-horizon MDP
         loss_critic = ((all_q1_c[:, :-1].mean(dim=-1) - rewards_to_go.detach())**2).mean() + ((all_q2_c[:, :-1].mean(dim=-1) - rewards_to_go.detach())**2).mean()
 
-        return loss_critic, loss_nll#.mean(dim=-1).mean(dim=-1)
+        rewards_to_go_alpha = reward_discrim_alpha + gamma * (all_q_target_alpha[:, 1:].mean(dim=-1))
+        rewards_to_go_alpha[:, -1] = reward_discrim_alpha[:, -1] # assuming finite-horizon MDP
+        loss_critic_alpha = ((all_q1_c_alpha[:, :-1].mean(dim=-1) - rewards_to_go_alpha.detach())**2).mean() + ((all_q2_c_alpha[:, :-1].mean(dim=-1) - rewards_to_go_alpha.detach())**2).mean()
+
+        return loss_critic + loss_critic_alpha, loss_nll#.mean(dim=-1).mean(dim=-1)
     
     def calculate_loss_pi(self, inputs, curr_epoch=0, is_train=False, teacher_forcing=True, return_edges=False, return_logits=False, use_prior_logits=False):
         decoder_hidden = self.decoder.get_initial_hidden(inputs)
+        decoder_hidden_alpha = self.decoder.get_initial_hidden(inputs)
         num_time_steps = inputs.size(1)
         all_edges = []
         all_predictions = []
         all_q_pi = []
+
+        all_predictions_alpha = []
+        all_q_pi_alpha = []
+
         all_q_g = []
         all_priors = []
         hard_sample = (not is_train) or self.train_hard_sample
@@ -254,6 +288,7 @@ class DNRI(nn.Module):
             teacher_forcing_steps = self.val_teacher_forcing_steps
         else:
             teacher_forcing_steps = self.teacher_forcing_steps
+        alpha = (2*torch.rand(inputs.shape[0], 1, 1, 1) - 1).cuda()
         for step in range(num_time_steps-1):
             traj_forcing = (step%(int(1.5**(curr_epoch//50)))==0)
             if (traj_forcing and teacher_forcing and (teacher_forcing_steps == -1 or step < teacher_forcing_steps)) or step == 0:
@@ -263,16 +298,24 @@ class DNRI(nn.Module):
 
             current_p_logits = prior_logits[:, step]
             predictions, decoder_hidden, q_pi_critic, edges = self.single_step_Actor(current_inputs, decoder_hidden, current_p_logits, hard_sample)
+
+            current_p_logits_alpha = prior_logits[:, step]
+            predictions_alpha, decoder_hidden_alpha, q_pi_critic_alpha, edges_alpha = self.single_step_Actor(alpha*inputs[:, step] + (1-alpha)*current_inputs, decoder_hidden_alpha, current_p_logits_alpha, hard_sample)
+            all_predictions_alpha.append(predictions_alpha)
+            all_q_pi_alpha.append(q_pi_critic_alpha)
             all_predictions.append(predictions)
             all_q_pi.append(q_pi_critic)
             all_edges.append(edges)
         all_predictions = torch.stack(all_predictions, dim=1)
         all_q_pi = torch.stack(all_q_pi, dim=1)
 
+        all_predictions_alpha = torch.stack(all_predictions_alpha, dim=1)
+        all_q_pi_alpha = torch.stack(all_q_pi_alpha, dim=1)
+
         # actor loss
         # for i in range(0, inputs.shape[1]-1, 7):
         #     print(all_predictions[0,i].mean().cpu().item(), inputs[0,i].mean().cpu().item())
-        loss_policy = - all_q_pi.mean(dim=-1)
+        loss_policy = - all_q_pi.mean(dim=-1) - all_q_pi_alpha.mean(dim=-1)
 
         prob_pr = F.softmax(prior_logits, dim=-1)
         if self.add_uniform_prior:
