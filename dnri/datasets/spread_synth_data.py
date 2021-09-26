@@ -170,10 +170,15 @@ if __name__ == '__main__':
     ################### 2) Multi-Modal Simple
     landmark_locs = np.array([[0., 2.], [0., -2.]])
     for sim in range(num_sims):
+        # p_vels = np.zeros((3,2))
+        # p_vels[:,0] += 0.05
+        # p_vels[1:,0] += 0.1
+        # p_locs = np.array([[-0.5, 0], [-2.0, 0], [-2.5, 0]])
+        p_omega = np.ones(3)*0.1
+        p_theta = np.ones(3)*(-np.pi) # let's keep limits as [-3, 3]
+
         p_vels = np.zeros((3,2))
-        p_vels[:,0] += 0.05
-        p_vels[1:,0] += 0.1
-        p_locs = np.array([[-0.5, 0], [-2.0, 0], [-2.5, 0]])
+        p_locs = np.zeros((3,2))
 
         current_feats = []
         current_edges = []
@@ -194,16 +199,31 @@ if __name__ == '__main__':
             [0, 1, 0]
 
             """
-            for i in range(3):
-                if i>0 and np.linalg.norm( p_locs[i,0] - p_locs[0,0])<0.8:
-                    p_vels[i,1] = 0.4*(p_locs[i,0] - p_locs[0,0])*((-1)**sim)
-                else:
-                    p_vels[i,1] = 0
-                p_locs[i] += p_vels[i]
+            # for i in range(3):
+            #     if i>0 and np.linalg.norm( p_locs[i,0] - p_locs[0,0])<0.8:
+            #         p_vels[i,1] = 0.4*(p_locs[i,0] - p_locs[0,0])*((-1)**sim)
+            #     else:
+            #         p_vels[i,1] = 0
+            #     p_locs[i] += p_vels[i]
 
-            p1_feat = np.concatenate([p_locs[0], p_vels[0]])
-            p2_feat = np.concatenate([p_locs[1], p_vels[1]])
-            p3_feat = np.concatenate([p_locs[2], p_vels[2]])
+            # p1_feat = np.concatenate([p_locs[0], p_vels[0]])
+            # p2_feat = np.concatenate([p_locs[1], p_vels[1]])
+            # p3_feat = np.concatenate([p_locs[2], p_vels[2]])
+
+            for i in range(3):
+                p_theta[i] += (i+1)*p_omega[i]
+            
+            for i in range(3):
+                if(i<1):
+                    toAdd = np.zeros(2)
+                else:
+                    toAdd = p_locs[i-1]
+                p_locs[i] = toAdd + np.array([np.cos(p_theta[i]), np.sin(p_theta[i])])*0.8
+
+            p1_feat = np.concatenate([p_locs[0], [p_theta[0], p_omega[0]]])
+            p2_feat = np.concatenate([p_locs[1], [p_theta[1], p_omega[1]]])
+            p3_feat = np.concatenate([p_locs[2], [p_theta[2], p_omega[2]]])
+            
             new_feat = np.stack([p1_feat, p2_feat, p3_feat])
             current_feats.append(new_feat)
         all_data.append(np.stack(current_feats))
