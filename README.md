@@ -1,4 +1,4 @@
-# Code for the GAIL part of it
+# Code for SS-MAIL
 
 Another minor modification to test branch pushing
 
